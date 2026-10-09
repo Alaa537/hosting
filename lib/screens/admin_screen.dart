@@ -406,53 +406,97 @@ class _UsersListScreenState extends State<_UsersListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Users (${_u.length})'),
-        actions: [IconButton(onPressed: _refresh,
-            icon: const Icon(Icons.refresh, color: C.primary))]),
-      body: SafeArea(child: RefreshIndicator(onRefresh: _refresh,
-        color: C.primary, backgroundColor: C.surface,
-        child: ListView.builder(padding: const EdgeInsets.all(12),
-          itemCount: _u.length,
-          itemBuilder: (_, i) {
-            final u = _u[i];
-            final roleColor = u.isAdmin ? C.accent : C.primary;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(color: C.surface,
+      appBar: AppBar(
+        title: Text('Users (${_u.length})'),
+        actions: [
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh, color: C.primary),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          color: C.primary,
+          backgroundColor: C.surface,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: _u.length,
+            itemBuilder: (_, i) {
+              final u = _u[i];
+              final roleColor = u.isAdmin ? C.accent : C.primary;
+              final exp = u.expiresAt != null
+                  ? ' · exp ${fDate(u.expiresAt).split(" ").first}'
+                  : '';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: C.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: C.border)),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: roleColor.withValues(alpha: .2),
-                  child: Text(u.username[0].toUpperCase(),
-                      style: TextStyle(color: roleColor,
-                          fontWeight: FontWeight.w800)),
+                  border: Border.all(color: C.border),
                 ),
-                title: Row(children: [
-                  Text(u.username, style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 13)),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(color: roleColor,
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Text(u.role.toUpperCase(),
-                        style: const TextStyle(color: Colors.black,
-                            fontSize: 8, fontWeight: FontWeight.w900)),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: roleColor.withValues(alpha: .2),
+                    child: Text(
+                      u.username[0].toUpperCase(),
+                      style: TextStyle(
+                        color: roleColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
-                  if (u.banned) ...[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.block, size: 12, color: C.danger),
-                  ],
-                ]),
-                subtitle: Text('uid=${u.id} · ${u.status}'
-                    '${u.expiresAt != null ? " · exp ${fDate(u.expiresAt).split(" ").first}" : ""}',
-                    style: const TextStyle(color: C.muted, fontSize: 10)),
-                trailing: const Icon(Icons.chevron_right, color: C.muted, size: 18),
-                onTap: () => _actions(u),
-              ),
-            );
-          })),
+                  title: Row(
+                    children: [
+                      Text(
+                        u.username,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: roleColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          u.role.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      if (u.banned) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.block, size: 12, color: C.danger),
+                      ],
+                    ],
+                  ),
+                  subtitle: Text(
+                    'uid=${u.id} · ${u.status}$exp',
+                    style: const TextStyle(color: C.muted, fontSize: 10),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: C.muted,
+                    size: 18,
+                  ),
+                  onTap: () => _actions(u),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }

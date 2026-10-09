@@ -38,6 +38,49 @@ jobs:
       - name: Create android folder
         run: flutter create --platforms android --org com.alaa --project-name hosting .
 
+      - name: Inject permissions into AndroidManifest
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+
+          perms = '''    <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+          '''
+
+          if 'android.permission.INTERNET' not in s:
+              s = s.replace('<application', perms + '    <application', 1)
+              p.write_text(s)
+              print('✓ Permissions injected')
+          else:
+              print('= Already present')
+
+          # Also force requestLegacyExternalStorage for file access on Android 10
+          if 'requestLegacyExternalStorage' not in s:
+              s = p.read_text()
+              s = s.replace('<application',
+                  '<application android:requestLegacyExternalStorage="true"', 1)
+              p.write_text(s)
+              print('✓ requestLegacyExternalStorage added')
+
+          # Ensure usesCleartextTraffic for HTTP API (not HTTPS)
+          if 'usesCleartextTraffic' not in s:
+              s = p.read_text()
+              s = s.replace('<application',
+                  '<application android:usesCleartextTraffic="true"', 1)
+              p.write_text(s)
+              print('✓ usesCleartextTraffic added (for http:// API)')
+          PY
+
       - name: Build
         run: |
           TYPE="${{ github.event.inputs.build_type }}"

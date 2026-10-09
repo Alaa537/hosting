@@ -240,4 +240,6 @@ class AdminUser {
     role: j['role'] ?? 'user', status: j['status'] ?? '?',
     banned: j['banned'] ?? false, expiresAt: j['expires_at'],
   );
+
+  bool get isAdmin => role == 'admin';
 }

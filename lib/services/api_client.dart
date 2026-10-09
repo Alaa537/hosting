@@ -298,6 +298,14 @@ class ApiClient {
     return l.cast<Map<String, dynamic>>();
   }
 
+  Future<void> announce(String text) =>
+      _post('/admin/announcements', body: {'text': text});
+
+  Future<List<Map<String, dynamic>>> announcementsAdmin() async {
+    final l = await _get('/admin/announcements') as List;
+    return l.cast<Map<String, dynamic>>();
+  }
+
   Future<Map<String, dynamic>> dbBackup() async =>
       Map<String, dynamic>.from(await _post('/admin/db-backup'));
 

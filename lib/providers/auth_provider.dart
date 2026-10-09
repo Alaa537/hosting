@@ -66,6 +66,10 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> logoutAll() async {
+    try { await api!.logoutAll(); } catch (_) {}
+  }
+
   Future<void> logout() async {
     try { await api!.logoutAll(); } catch (_) {}
     await Store.saveToken(null);

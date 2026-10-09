@@ -1,0 +1,52 @@
+import 'package:flutter/material.dart';
+import '../utils/constants.dart';
+import 'dashboard_screen.dart';
+import 'server_screen.dart';
+import 'files_screen.dart';
+import 'bots_screen.dart';
+import 'more_screen.dart';
+
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _i = 0;
+  static const _tabs = [
+    DashboardScreen(), ServerScreen(), FilesScreen(),
+    BotsScreen(), MoreScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _i, children: _tabs),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: C.border)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _i,
+          onDestinationSelected: (v) => setState(() => _i = v),
+          backgroundColor: C.surface,
+          indicatorColor: C.primary.withValues(alpha: .15),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.dashboard_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.dashboard, color: C.primary), label: 'Dash'),
+            NavigationDestination(icon: Icon(Icons.dns_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.dns, color: C.primary), label: 'Server'),
+            NavigationDestination(icon: Icon(Icons.folder_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.folder, color: C.primary), label: 'Files'),
+            NavigationDestination(icon: Icon(Icons.smart_toy_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.smart_toy, color: C.primary), label: 'Bots'),
+            NavigationDestination(icon: Icon(Icons.menu, color: C.muted),
+                selectedIcon: Icon(Icons.menu, color: C.primary), label: 'More'),
+          ],
+        ),
+      ),
+    );
+  }
+}

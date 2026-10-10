@@ -42,10 +42,9 @@ jobs:
         run: |
           python3 << 'PY'
           from pathlib import Path
+          import re
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
-          # Change android:label to HOST PANEL
-          import re
           s = re.sub(r'android:label="[^"]*"', 'android:label="HOST PANEL"', s, count=1)
           p.write_text(s)
           print('✓ label = HOST PANEL')
@@ -114,113 +113,151 @@ jobs:
                       }
               }
 
-              private fun isVpnActive(): Boolean = try {
-                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                      val net = cm.activeNetwork ?: return false
-                      val caps = cm.getNetworkCapabilities(net) ?: return false
-                      if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true
-                      if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                          && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true
+              private fun isVpnActive(): Boolean {
+                  return try {
+                      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          val net = cm.activeNetwork ?: return false
+                          val caps = cm.getNetworkCapabilities(net) ?: return false
+                          if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true
+                          if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                              && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true
+                      }
+                      false
+                  } catch (_: Exception) {
+                      false
                   }
-                  false
-              } catch (_: Exception) { false }
+              }
 
-              private fun hasVpnInterface(): Boolean = try {
-                  java.net.NetworkInterface.getNetworkInterfaces().toList().any {
-                      val n = it.name.lowercase()
-                      n.startsWith("tun") || n.startsWith("tap") ||
-                      n.startsWith("ppp") || n.startsWith("wg") ||
-                      n.startsWith("utun")
+              private fun hasVpnInterface(): Boolean {
+                  return try {
+                      java.net.NetworkInterface.getNetworkInterfaces().toList().any {
+                          val n = it.name.lowercase()
+                          n.startsWith("tun") || n.startsWith("tap") ||
+                          n.startsWith("ppp") || n.startsWith("wg") ||
+                          n.startsWith("utun")
+                      }
+                  } catch (_: Exception) {
+                      false
                   }
-              } catch (_: Exception) { false }
+              }
 
-              private fun hasVpnRoute(): Boolean = try {
-                  val f = File("/proc/net/route")
-                  if (!f.exists()) return false
-                  BufferedReader(FileReader(f)).use { r ->
-                      r.readLine()
-                      var line = r.readLine()
-                      while (line != null) {
-                          val parts = line.split("\t", " ")
-                              .filter { it.isNotBlank() }
-                          if (parts.size >= 2) {
-                              val iface = parts[0].lowercase()
-                              val dest  = parts[1]
-                              if (dest == "00000000" &&
-                                  (iface.startsWith("tun") || iface.startsWith("ppp") ||
-                                   iface.startsWith("wg")  || iface.startsWith("tap"))) {
-                                  return true
+              private fun hasVpnRoute(): Boolean {
+                  return try {
+                      val f = File("/proc/net/route")
+                      if (!f.exists()) return false
+                      var found = false
+                      BufferedReader(FileReader(f)).use { r ->
+                          r.readLine()
+                          var line = r.readLine()
+                          while (line != null) {
+                              val parts = line.split("\t", " ")
+                                  .filter { it.isNotBlank() }
+                              if (parts.size >= 2) {
+                                  val iface = parts[0].lowercase()
+                                  val dest  = parts[1]
+                                  if (dest == "00000000" &&
+                                      (iface.startsWith("tun") || iface.startsWith("ppp") ||
+                                       iface.startsWith("wg")  || iface.startsWith("tap"))) {
+                                      found = true
+                                      break
+                                  }
                               }
+                              line = r.readLine()
                           }
-                          line = r.readLine()
                       }
+                      found
+                  } catch (_: Exception) {
+                      false
                   }
-                  false
-              } catch (_: Exception) { false }
+              }
 
-              private fun hasSuspiciousDns(): Boolean = try {
-                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                  val net = cm.activeNetwork ?: return false
-                  val lp = cm.getLinkProperties(net) ?: return false
-                  lp.dnsServers.any { a ->
-                      val ip = a.hostAddress ?: return@any false
-                      ip.startsWith("10.")    || ip.startsWith("127.") ||
-                      ip.startsWith("192.168.") || ip.startsWith("172.")
-                  }
-              } catch (_: Exception) { false }
-
-              private fun hasVpnApp(): Boolean = try {
-                  val pm = packageManager
-                  val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                  installed.any { app ->
-                      val pkg = app.packageName.lowercase()
-                      VPN_PKGS.any { pkg.contains(it.lowercase()) }
-                  }
-              } catch (_: Exception) { false }
-
-              private fun getHttpProxy(): String? = try {
-                  val h = System.getProperty("http.proxyHost")
-                  val p = System.getProperty("http.proxyPort")
-                  if (!h.isNullOrEmpty()) "$h:$p" else null
-              } catch (_: Exception) { null }
-
-              private fun getRunningProcs(): String = try {
-                  val sb = StringBuilder()
-                  File("/proc").listFiles()?.forEach { f ->
-                      if (f.name.all { it.isDigit() }) {
-                          val cmd = File(f, "cmdline")
-                          if (cmd.exists()) try {
-                              sb.append(cmd.readText()).append('\n')
-                          } catch (_: Exception) {}
+              private fun hasSuspiciousDns(): Boolean {
+                  return try {
+                      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                      val net = cm.activeNetwork ?: return false
+                      val lp = cm.getLinkProperties(net) ?: return false
+                      lp.dnsServers.any { a ->
+                          val ip = a.hostAddress ?: return@any false
+                          ip.startsWith("10.")    || ip.startsWith("127.") ||
+                          ip.startsWith("192.168.") || ip.startsWith("172.")
                       }
+                  } catch (_: Exception) {
+                      false
                   }
-                  sb.toString()
-              } catch (_: Exception) { "" }
+              }
 
-              private fun hasUserCaInstalled(): Boolean = try {
-                  val f = File("/data/misc/user/0/cacerts-added")
-                  f.exists() && (f.listFiles()?.isNotEmpty() == true)
-              } catch (_: Exception) { false }
+              private fun hasVpnApp(): Boolean {
+                  return try {
+                      val pm = packageManager
+                      val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                      installed.any { app ->
+                          val pkg = app.packageName.lowercase()
+                          VPN_PKGS.any { pkg.contains(it.lowercase()) }
+                      }
+                  } catch (_: Exception) {
+                      false
+                  }
+              }
 
-              private fun getApkSignatureSha256(): String? = try {
-                  val pm = packageManager
-                  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                  } else {
-                      @Suppress("DEPRECATION")
-                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+              private fun getHttpProxy(): String? {
+                  return try {
+                      val h = System.getProperty("http.proxyHost")
+                      val p = System.getProperty("http.proxyPort")
+                      if (!h.isNullOrEmpty()) "$h:$p" else null
+                  } catch (_: Exception) {
+                      null
                   }
-                  val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                      info.signingInfo?.apkContentsSigners
-                  } else {
-                      @Suppress("DEPRECATION")
-                      info.signatures
+              }
+
+              private fun getRunningProcs(): String {
+                  return try {
+                      val sb = StringBuilder()
+                      File("/proc").listFiles()?.forEach { f ->
+                          if (f.name.all { it.isDigit() }) {
+                              val cmd = File(f, "cmdline")
+                              if (cmd.exists()) try {
+                                  sb.append(cmd.readText()).append('\n')
+                              } catch (_: Exception) {}
+                          }
+                      }
+                      sb.toString()
+                  } catch (_: Exception) {
+                      ""
                   }
-                  val sig = sigs?.firstOrNull() ?: return null
-                  MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
-                      .joinToString(":") { "%02X".format(it) }
-              } catch (_: Exception) { null }
+              }
+
+              private fun hasUserCaInstalled(): Boolean {
+                  return try {
+                      val f = File("/data/misc/user/0/cacerts-added")
+                      f.exists() && (f.listFiles()?.isNotEmpty() == true)
+                  } catch (_: Exception) {
+                      false
+                  }
+              }
+
+              private fun getApkSignatureSha256(): String? {
+                  return try {
+                      val pm = packageManager
+                      val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                      } else {
+                          @Suppress("DEPRECATION")
+                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+                      }
+                      val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                          info.signingInfo?.apkContentsSigners
+                      } else {
+                          @Suppress("DEPRECATION")
+                          info.signatures
+                      }
+                      val sig = sigs?.firstOrNull() ?: return null
+                      MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+                          .joinToString(":") { "%02X".format(it) }
+                  } catch (_: Exception) {
+                      null
+                  }
+              }
           }
           KOT
 

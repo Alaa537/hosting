@@ -73,6 +73,10 @@ class SecurityBlockScreen extends StatelessWidget {
         return ('⚠️', 'تطبيق معدّل',
             'توقيع هذا التطبيق غير مطابق للتوقيع الرسمي.\n'
             'حمّل النسخة الأصلية من القناة الرسمية.', C.danger);
+      case SecurityStatus.ssl:
+        return ('🔒', 'خطأ في شهادة الاتصال',
+            'شهادة الاتصال غير موثوقة.\n'
+            'قد تكون هناك محاولة اعتراض للاتصال.', C.danger);
       case SecurityStatus.error:
         return ('⚠️', 'خطأ في التحقق',
             result.message ?? 'تعذّر التحقق من التطبيق.', C.warning);

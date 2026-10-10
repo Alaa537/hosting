@@ -38,6 +38,22 @@ jobs:
       - name: Create android folder
         run: flutter create --platforms android --org com.alaa --project-name hosting .
 
+      - name: Set app label to HOST PANEL
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          # Change android:label to HOST PANEL
+          import re
+          s = re.sub(r'android:label="[^"]*"', 'android:label="HOST PANEL"', s, count=1)
+          p.write_text(s)
+          print('✓ label = HOST PANEL')
+          PY
+
+      - name: Generate app icons from PNG
+        run: dart run flutter_launcher_icons
+
       - name: Inject MainActivity.kt (native security)
         run: |
           MAIN_KT=android/app/src/main/kotlin/com/alaa/hosting/MainActivity.kt
@@ -61,7 +77,6 @@ jobs:
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
 
-              // Known VPN app packages (partial name match)
               private val VPN_PKGS = listOf(
                   "com.wireguard.android", "net.openvpn.openvpn",
                   "com.openvpn.openvpn", "de.blinkt.openvpn",
@@ -99,8 +114,6 @@ jobs:
                       }
               }
 
-              // ---------------- VPN ----------------
-
               private fun isVpnActive(): Boolean = try {
                   val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -126,7 +139,7 @@ jobs:
                   val f = File("/proc/net/route")
                   if (!f.exists()) return false
                   BufferedReader(FileReader(f)).use { r ->
-                      r.readLine() // header
+                      r.readLine()
                       var line = r.readLine()
                       while (line != null) {
                           val parts = line.split("\t", " ")
@@ -166,8 +179,6 @@ jobs:
                   }
               } catch (_: Exception) { false }
 
-              // ---------------- MITM ----------------
-
               private fun getHttpProxy(): String? = try {
                   val h = System.getProperty("http.proxyHost")
                   val p = System.getProperty("http.proxyPort")
@@ -191,8 +202,6 @@ jobs:
                   val f = File("/data/misc/user/0/cacerts-added")
                   f.exists() && (f.listFiles()?.isNotEmpty() == true)
               } catch (_: Exception) { false }
-
-              // ---------------- Signature ----------------
 
               private fun getApkSignatureSha256(): String? = try {
                   val pm = packageManager

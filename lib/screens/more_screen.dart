@@ -124,7 +124,7 @@ class MoreScreen extends StatelessWidget {
             ),
             const SizedBox(height: 30),
             Center(child: Column(children: [
-              Text('HOSTING',
+              Text('HOST PANEL',
                   style: TextStyle(color: C.muted.withValues(alpha: .5),
                       fontSize: 12, fontWeight: FontWeight.w900,
                       letterSpacing: 4)),

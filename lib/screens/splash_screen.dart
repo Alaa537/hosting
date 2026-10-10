@@ -145,7 +145,7 @@ class _SplashScreenState extends State<SplashScreen>
     shaderCallback: (r) => const LinearGradient(
       colors: [C.primary, C.accent],
     ).createShader(r),
-    child: const Text('HOSTING',
+    child: const Text('HOST PANEL',
         style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900,
             letterSpacing: 6, color: Colors.white)),
   );

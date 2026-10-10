@@ -77,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ShaderMask(
                 shaderCallback: (r) => const LinearGradient(
                   colors: [C.primary, C.accent]).createShader(r),
-                child: const Text('HOSTING',
+                child: const Text('HOST PANEL',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900,
                         letterSpacing: 4, color: Colors.white)),

@@ -53,41 +53,120 @@ jobs:
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
+          import java.io.BufferedReader
           import java.io.File
+          import java.io.FileReader
           import java.security.MessageDigest
 
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
+
+              // Known VPN app packages (partial name match)
+              private val VPN_PKGS = listOf(
+                  "com.wireguard.android", "net.openvpn.openvpn",
+                  "com.openvpn.openvpn", "de.blinkt.openvpn",
+                  "com.nordvpn.android", "com.expressvpn.vpn",
+                  "com.protonvpn.android", "com.surfshark.vpnclient.android",
+                  "com.privateinternetaccess.android", "com.psiphon3",
+                  "org.torproject.torbrowser", "org.torproject.android",
+                  "com.cloudflare.onedotonedotonedotone",
+                  "com.tailscale.ipn", "com.windscribe.vpn",
+                  "com.hotspotshield.vpn", "com.tunnelbear.android",
+                  "free.vpn.unblock.proxy.turbovpn", "com.vpn.free.proxy",
+                  "io.psiphon", "com.vpnhood.vpnclient",
+                  "com.anonytun.android", "com.anyconnect",
+                  "com.cisco.anyconnect.vpn.android.avf",
+                  "com.turbo.vpn", "com.vpn.proxy.master",
+                  "com.free.vpn.super", "com.vpn.unlimited"
+              )
 
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CH)
                       .setMethodCallHandler { call, result ->
                           when (call.method) {
-                              "isVpnActive" -> result.success(isVpnActive())
-                              "hasVpnInterface" -> result.success(hasVpnInterface())
-                              "getHttpProxy" -> result.success(getHttpProxy())
-                              "hasSuspiciousCa" -> result.success(false)
-                              "getRunningProcs" -> result.success(getRunningProcs())
+                              "isVpnActive"        -> result.success(isVpnActive())
+                              "hasVpnInterface"    -> result.success(hasVpnInterface())
+                              "hasVpnRoute"        -> result.success(hasVpnRoute())
+                              "hasSuspiciousDns"   -> result.success(hasSuspiciousDns())
+                              "hasVpnApp"          -> result.success(hasVpnApp())
+                              "getHttpProxy"       -> result.success(getHttpProxy())
+                              "getRunningProcs"    -> result.success(getRunningProcs())
+                              "hasUserCaInstalled" -> result.success(hasUserCaInstalled())
                               "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
                               else -> result.notImplemented()
                           }
                       }
               }
 
+              // ---------------- VPN ----------------
+
               private fun isVpnActive(): Boolean = try {
                   val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                       val net = cm.activeNetwork ?: return false
                       val caps = cm.getNetworkCapabilities(net) ?: return false
-                      caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                  } else false
+                      if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true
+                      if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                          && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true
+                  }
+                  false
               } catch (_: Exception) { false }
 
               private fun hasVpnInterface(): Boolean = try {
-                  java.net.NetworkInterface.getNetworkInterfaces().toList()
-                      .any { it.name.startsWith("tun") || it.name.startsWith("ppp") }
+                  java.net.NetworkInterface.getNetworkInterfaces().toList().any {
+                      val n = it.name.lowercase()
+                      n.startsWith("tun") || n.startsWith("tap") ||
+                      n.startsWith("ppp") || n.startsWith("wg") ||
+                      n.startsWith("utun")
+                  }
               } catch (_: Exception) { false }
+
+              private fun hasVpnRoute(): Boolean = try {
+                  val f = File("/proc/net/route")
+                  if (!f.exists()) return false
+                  BufferedReader(FileReader(f)).use { r ->
+                      r.readLine() // header
+                      var line = r.readLine()
+                      while (line != null) {
+                          val parts = line.split("\t", " ")
+                              .filter { it.isNotBlank() }
+                          if (parts.size >= 2) {
+                              val iface = parts[0].lowercase()
+                              val dest  = parts[1]
+                              if (dest == "00000000" &&
+                                  (iface.startsWith("tun") || iface.startsWith("ppp") ||
+                                   iface.startsWith("wg")  || iface.startsWith("tap"))) {
+                                  return true
+                              }
+                          }
+                          line = r.readLine()
+                      }
+                  }
+                  false
+              } catch (_: Exception) { false }
+
+              private fun hasSuspiciousDns(): Boolean = try {
+                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                  val net = cm.activeNetwork ?: return false
+                  val lp = cm.getLinkProperties(net) ?: return false
+                  lp.dnsServers.any { a ->
+                      val ip = a.hostAddress ?: return@any false
+                      ip.startsWith("10.")    || ip.startsWith("127.") ||
+                      ip.startsWith("192.168.") || ip.startsWith("172.")
+                  }
+              } catch (_: Exception) { false }
+
+              private fun hasVpnApp(): Boolean = try {
+                  val pm = packageManager
+                  val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                  installed.any { app ->
+                      val pkg = app.packageName.lowercase()
+                      VPN_PKGS.any { pkg.contains(it.lowercase()) }
+                  }
+              } catch (_: Exception) { false }
+
+              // ---------------- MITM ----------------
 
               private fun getHttpProxy(): String? = try {
                   val h = System.getProperty("http.proxyHost")
@@ -100,11 +179,20 @@ jobs:
                   File("/proc").listFiles()?.forEach { f ->
                       if (f.name.all { it.isDigit() }) {
                           val cmd = File(f, "cmdline")
-                          if (cmd.exists()) try { sb.append(cmd.readText()).append('\n') } catch (_: Exception) {}
+                          if (cmd.exists()) try {
+                              sb.append(cmd.readText()).append('\n')
+                          } catch (_: Exception) {}
                       }
                   }
                   sb.toString()
               } catch (_: Exception) { "" }
+
+              private fun hasUserCaInstalled(): Boolean = try {
+                  val f = File("/data/misc/user/0/cacerts-added")
+                  f.exists() && (f.listFiles()?.isNotEmpty() == true)
+              } catch (_: Exception) { false }
+
+              // ---------------- Signature ----------------
 
               private fun getApkSignatureSha256(): String? = try {
                   val pm = packageManager
@@ -136,6 +224,7 @@ jobs:
           perms = '''    <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
               <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
               <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
@@ -151,6 +240,7 @@ jobs:
           if 'requestLegacyExternalStorage' not in s:
               s = s.replace('<application', '<application android:requestLegacyExternalStorage="true"', 1)
           p.write_text(s)
+          print('✓ manifest patched')
           PY
 
       - name: Build

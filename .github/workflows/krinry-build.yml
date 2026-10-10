@@ -124,9 +124,7 @@ jobs:
                               && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true
                       }
                       false
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun hasVpnInterface(): Boolean {
@@ -137,9 +135,7 @@ jobs:
                           n.startsWith("ppp") || n.startsWith("wg") ||
                           n.startsWith("utun")
                       }
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun hasVpnRoute(): Boolean {
@@ -151,8 +147,7 @@ jobs:
                           r.readLine()
                           var line = r.readLine()
                           while (line != null) {
-                              val parts = line.split("\t", " ")
-                                  .filter { it.isNotBlank() }
+                              val parts = line.split("\t", " ").filter { it.isNotBlank() }
                               if (parts.size >= 2) {
                                   val iface = parts[0].lowercase()
                                   val dest  = parts[1]
@@ -167,9 +162,7 @@ jobs:
                           }
                       }
                       found
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun hasSuspiciousDns(): Boolean {
@@ -179,12 +172,10 @@ jobs:
                       val lp = cm.getLinkProperties(net) ?: return false
                       lp.dnsServers.any { a ->
                           val ip = a.hostAddress ?: return@any false
-                          ip.startsWith("10.")    || ip.startsWith("127.") ||
+                          ip.startsWith("10.")     || ip.startsWith("127.") ||
                           ip.startsWith("192.168.") || ip.startsWith("172.")
                       }
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun hasVpnApp(): Boolean {
@@ -195,9 +186,7 @@ jobs:
                           val pkg = app.packageName.lowercase()
                           VPN_PKGS.any { pkg.contains(it.lowercase()) }
                       }
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun getHttpProxy(): String? {
@@ -205,9 +194,7 @@ jobs:
                       val h = System.getProperty("http.proxyHost")
                       val p = System.getProperty("http.proxyPort")
                       if (!h.isNullOrEmpty()) "$h:$p" else null
-                  } catch (_: Exception) {
-                      null
-                  }
+                  } catch (_: Exception) { null }
               }
 
               private fun getRunningProcs(): String {
@@ -222,18 +209,14 @@ jobs:
                           }
                       }
                       sb.toString()
-                  } catch (_: Exception) {
-                      ""
-                  }
+                  } catch (_: Exception) { "" }
               }
 
               private fun hasUserCaInstalled(): Boolean {
                   return try {
                       val f = File("/data/misc/user/0/cacerts-added")
                       f.exists() && (f.listFiles()?.isNotEmpty() == true)
-                  } catch (_: Exception) {
-                      false
-                  }
+                  } catch (_: Exception) { false }
               }
 
               private fun getApkSignatureSha256(): String? {
@@ -254,9 +237,7 @@ jobs:
                       val sig = sigs?.firstOrNull() ?: return null
                       MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
                           .joinToString(":") { "%02X".format(it) }
-                  } catch (_: Exception) {
-                      null
-                  }
+                  } catch (_: Exception) { null }
               }
           }
           KOT
@@ -289,17 +270,26 @@ jobs:
           print('✓ manifest patched')
           PY
 
-      - name: Build
+      - name: Build (with Dart obfuscation)
         run: |
           TYPE="${{ github.event.inputs.build_type }}"
           OUT="${{ github.event.inputs.output_type }}"
+          FLAGS="--obfuscate --split-debug-info=build/symbols"
           if [ "$OUT" = "apk" ]; then
-            flutter build apk --$TYPE
+            flutter build apk --$TYPE $FLAGS
           elif [ "$OUT" = "apk-split" ]; then
-            flutter build apk --$TYPE --split-per-abi
+            flutter build apk --$TYPE $FLAGS --split-per-abi
           elif [ "$OUT" = "appbundle" ]; then
-            flutter build appbundle --$TYPE
+            flutter build appbundle --$TYPE $FLAGS
           fi
+
+      - name: Upload debug symbols (private artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-symbols-private
+          path: build/symbols/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
         with:

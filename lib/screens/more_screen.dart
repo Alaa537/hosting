@@ -6,6 +6,8 @@ import '../widgets/dialogs.dart';
 import 'profile_screen.dart';
 import 'backups_screen.dart';
 import 'notifications_screen.dart';
+import 'sessions_screen.dart';
+import 'user_info_screen.dart';
 import 'admin_screen.dart';
 import 'settings_screen.dart';
 
@@ -17,7 +19,7 @@ class MoreScreen extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final user = auth.user;
     return Scaffold(
-      appBar: AppBar(title: const Text('More')),
+      appBar: AppBar(title: const Text('المزيد')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -47,11 +49,13 @@ class MoreScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(user?.username ?? '—',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        style: const TextStyle(fontSize: 18,
+                            fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
                     Row(children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: user?.isAdmin == true ? C.accent : C.primary,
                           borderRadius: BorderRadius.circular(20),
@@ -76,17 +80,27 @@ class MoreScreen extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 20),
-            _tile(context, Icons.person_outline, 'Profile', 'Account details',
+            _tile(context, Icons.person_outline, 'الملف الشخصي',
+                'معلومات الحساب',
                 () => _push(context, const ProfileScreen())),
-            _tile(context, Icons.backup_outlined, 'Backups', 'Create / restore',
+            _tile(context, Icons.pie_chart_outline, 'معلوماتي',
+                'الاستخدام · النشاط · التنبيهات',
+                () => _push(context, const UserInfoScreen())),
+            _tile(context, Icons.devices_other, 'جلساتي',
+                'الأجهزة المسجلة',
+                () => _push(context, const SessionsScreen())),
+            _tile(context, Icons.backup_outlined, 'النسخ الاحتياطي',
+                'إنشاء / استرجاع',
                 () => _push(context, const BackupsScreen())),
-            _tile(context, Icons.notifications_outlined, 'Notifications', 'Inbox',
+            _tile(context, Icons.notifications_outlined, 'الإشعارات',
+                'الوارد',
                 () => _push(context, const NotificationsScreen())),
             if (user?.isAdmin == true)
-              _tile(context, Icons.admin_panel_settings_outlined, 'Admin panel',
-                  'Users, requests, pool',
+              _tile(context, Icons.admin_panel_settings_outlined,
+                  'لوحة الأدمن', 'المستخدمين · الأجهزة · المحتوى',
                   () => _push(context, const AdminScreen()), accent: true),
-            _tile(context, Icons.settings_outlined, 'Settings', 'URL, password',
+            _tile(context, Icons.settings_outlined, 'الإعدادات',
+                'كلمة المرور · الجلسات',
                 () => _push(context, const SettingsScreen())),
             const SizedBox(height: 12),
             Container(
@@ -97,11 +111,12 @@ class MoreScreen extends StatelessWidget {
               ),
               child: ListTile(
                 leading: const Icon(Icons.logout, color: C.danger),
-                title: const Text('Sign out',
-                    style: TextStyle(color: C.danger, fontWeight: FontWeight.w700)),
+                title: const Text('تسجيل الخروج',
+                    style: TextStyle(color: C.danger,
+                        fontWeight: FontWeight.w700)),
                 onTap: () async {
-                  if (await confirm(context, 'Sign out?',
-                      msg: 'This will end your session.', danger: true)) {
+                  if (await confirm(context, 'تسجيل الخروج؟',
+                      msg: 'سيتم إنهاء الجلسة الحالية.', danger: true)) {
                     if (context.mounted) await auth.logout();
                   }
                 },
@@ -111,10 +126,12 @@ class MoreScreen extends StatelessWidget {
             Center(child: Column(children: [
               Text('HOSTING',
                   style: TextStyle(color: C.muted.withValues(alpha: .5),
-                      fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                      fontSize: 12, fontWeight: FontWeight.w900,
+                      letterSpacing: 4)),
               const SizedBox(height: 4),
-              Text('v1.0.0 · ${auth.baseUrl}',
-                  style: TextStyle(color: C.muted.withValues(alpha: .5), fontSize: 10)),
+              Text('v1.0.0',
+                  style: TextStyle(color: C.muted.withValues(alpha: .5),
+                      fontSize: 10)),
             ])),
             const SizedBox(height: 20),
           ],
@@ -130,7 +147,8 @@ class MoreScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: C.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent ? C.accent.withValues(alpha: .4) : C.border),
+        border: Border.all(color: accent
+            ? C.accent.withValues(alpha: .4) : C.border),
       ),
       child: ListTile(
         leading: Icon(ic, color: accent ? C.accent : C.primary),

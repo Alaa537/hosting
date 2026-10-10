@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 
 Future<bool> confirm(BuildContext ctx, String title,
-    {String? msg, bool danger = false}) async {
+    {String? msg, bool danger = false, bool default_ = false}) async {
   final r = await showDialog<bool>(
     context: ctx,
     builder: (_) => AlertDialog(

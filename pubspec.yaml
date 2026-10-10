@@ -9,24 +9,24 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  provider: ^6.1.1
-  shared_preferences: ^2.2.2
+  provider: ^6.1.2
+  shared_preferences: ^2.3.2
   flutter_secure_storage: ^9.2.2
-  http: ^1.2.1
+  http: ^1.2.2
   google_fonts: ^6.2.1
-  flutter_slidable: ^3.0.1
+  flutter_slidable: ^3.1.1
   flutter_animate: ^4.5.0
   flutter_staggered_animations: ^1.1.1
   shimmer: ^3.0.0
-  cached_network_image: ^3.3.1
-  url_launcher: ^6.2.6
-  share_plus: ^9.0.0
-  connectivity_plus: ^6.0.3
-  path_provider: ^2.1.2
-  file_picker: ^8.1.2
+  cached_network_image: ^3.4.1
+  url_launcher: ^6.3.1
+  share_plus: ^10.1.1
+  connectivity_plus: ^6.1.0
+  path_provider: ^2.1.5
+  file_picker: ^8.1.7
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
-  package_info_plus: ^8.0.2
+  package_info_plus: ^8.1.1
 
 dev_dependencies:
   flutter_test:

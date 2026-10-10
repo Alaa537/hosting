@@ -6,6 +6,9 @@ import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import 'admin_devices_screen.dart';
+import 'admin_sessions_screen.dart';
+import 'admin_content_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});

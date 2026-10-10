@@ -38,13 +38,101 @@ jobs:
       - name: Create android folder
         run: flutter create --platforms android --org com.alaa --project-name hosting .
 
+      - name: Inject MainActivity.kt (native security)
+        run: |
+          MAIN_KT=android/app/src/main/kotlin/com/alaa/hosting/MainActivity.kt
+          mkdir -p "$(dirname "$MAIN_KT")"
+          cat > "$MAIN_KT" << 'KOT'
+          package com.alaa.hosting
+
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.net.ConnectivityManager
+          import android.net.NetworkCapabilities
+          import android.os.Build
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          import java.io.File
+          import java.security.MessageDigest
+
+          class MainActivity : FlutterActivity() {
+              private val CH = "hosting/security"
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CH)
+                      .setMethodCallHandler { call, result ->
+                          when (call.method) {
+                              "isVpnActive" -> result.success(isVpnActive())
+                              "hasVpnInterface" -> result.success(hasVpnInterface())
+                              "getHttpProxy" -> result.success(getHttpProxy())
+                              "hasSuspiciousCa" -> result.success(false)
+                              "getRunningProcs" -> result.success(getRunningProcs())
+                              "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
+                              else -> result.notImplemented()
+                          }
+                      }
+              }
+
+              private fun isVpnActive(): Boolean = try {
+                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      val net = cm.activeNetwork ?: return false
+                      val caps = cm.getNetworkCapabilities(net) ?: return false
+                      caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                  } else false
+              } catch (_: Exception) { false }
+
+              private fun hasVpnInterface(): Boolean = try {
+                  java.net.NetworkInterface.getNetworkInterfaces().toList()
+                      .any { it.name.startsWith("tun") || it.name.startsWith("ppp") }
+              } catch (_: Exception) { false }
+
+              private fun getHttpProxy(): String? = try {
+                  val h = System.getProperty("http.proxyHost")
+                  val p = System.getProperty("http.proxyPort")
+                  if (!h.isNullOrEmpty()) "$h:$p" else null
+              } catch (_: Exception) { null }
+
+              private fun getRunningProcs(): String = try {
+                  val sb = StringBuilder()
+                  File("/proc").listFiles()?.forEach { f ->
+                      if (f.name.all { it.isDigit() }) {
+                          val cmd = File(f, "cmdline")
+                          if (cmd.exists()) try { sb.append(cmd.readText()).append('\n') } catch (_: Exception) {}
+                      }
+                  }
+                  sb.toString()
+              } catch (_: Exception) { "" }
+
+              private fun getApkSignatureSha256(): String? = try {
+                  val pm = packageManager
+                  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                  } else {
+                      @Suppress("DEPRECATION")
+                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+                  }
+                  val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      info.signingInfo?.apkContentsSigners
+                  } else {
+                      @Suppress("DEPRECATION")
+                      info.signatures
+                  }
+                  val sig = sigs?.firstOrNull() ?: return null
+                  MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+                      .joinToString(":") { "%02X".format(it) }
+              } catch (_: Exception) { null }
+          }
+          KOT
+
       - name: Inject permissions into AndroidManifest
         run: |
           python3 << 'PY'
           from pathlib import Path
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
-
           perms = '''    <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
               <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -56,29 +144,13 @@ jobs:
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
           '''
-
           if 'android.permission.INTERNET' not in s:
               s = s.replace('<application', perms + '    <application', 1)
-              p.write_text(s)
-              print('✓ Permissions injected')
-          else:
-              print('= Already present')
-
-          # Also force requestLegacyExternalStorage for file access on Android 10
-          if 'requestLegacyExternalStorage' not in s:
-              s = p.read_text()
-              s = s.replace('<application',
-                  '<application android:requestLegacyExternalStorage="true"', 1)
-              p.write_text(s)
-              print('✓ requestLegacyExternalStorage added')
-
-          # Ensure usesCleartextTraffic for HTTP API (not HTTPS)
           if 'usesCleartextTraffic' not in s:
-              s = p.read_text()
-              s = s.replace('<application',
-                  '<application android:usesCleartextTraffic="true"', 1)
-              p.write_text(s)
-              print('✓ usesCleartextTraffic added (for http:// API)')
+              s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          if 'requestLegacyExternalStorage' not in s:
+              s = s.replace('<application', '<application android:requestLegacyExternalStorage="true"', 1)
+          p.write_text(s)
           PY
 
       - name: Build

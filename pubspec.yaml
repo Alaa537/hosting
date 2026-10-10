@@ -27,6 +27,8 @@ dependencies:
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
   package_info_plus: ^8.1.1
+  crypto: ^3.0.5
+  device_info_plus: ^11.1.0
 
 dev_dependencies:
   flutter_test:

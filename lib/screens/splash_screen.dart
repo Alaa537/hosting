@@ -5,6 +5,8 @@ import '../models/bootstrap.dart';
 import '../providers/auth_provider.dart';
 import '../services/storage.dart';
 import '../utils/constants.dart';
+import '../services/security_service.dart';
+import '../widgets/security_dialog.dart';
 import '../widgets/announcement_dialog.dart';
 import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
@@ -23,6 +25,8 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this, duration: const Duration(milliseconds: 1400))..forward();
 
   bool _bootstrapChecked = false;
+  SecurityResult? _securityResult;
+  bool _securityChecked = false;
 
   @override
   void dispose() { _c.dispose(); super.dispose(); }
@@ -30,6 +34,20 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(builder: (_, auth, __) {
+      // Security gate — must pass before anything else.
+      if (!_securityChecked) {
+        _securityChecked = true;
+        Future.microtask(() async {
+          final r = await SecurityService.verify();
+          if (mounted) setState(() => _securityResult = r);
+        });
+        return const Scaffold(body: Center(
+          child: CircularProgressIndicator(color: C.primary)));
+      }
+      if (_securityResult != null && !_securityResult!.isOk) {
+        return SecurityBlockScreen(result: _securityResult!);
+      }
+
       if (auth.state == AuthState.blocked) {
         return KillSwitchScreen(
           reason: auth.blockedReason ?? '',

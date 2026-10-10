@@ -4,6 +4,7 @@ import 'providers/auth_provider.dart';
 import 'providers/app_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
+import 'widgets/telegram_fab.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,14 @@ class HostingApp extends StatelessWidget {
         theme: AppTheme.dark,
         themeMode: ThemeMode.dark,
         home: const SplashScreen(),
+        builder: (context, child) => Stack(children: [
+          if (child != null) child,
+          Positioned(
+            right: 16,
+            bottom: 90,
+            child: const TelegramFab(),
+          ),
+        ]),
       ),
     );
   }

@@ -7,8 +7,10 @@ import '../providers/auth_provider.dart';
 import '../models/models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
+import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import '../widgets/log_viewer.dart';
 
 class BotDetailScreen extends StatefulWidget {
   final String fname;
@@ -22,10 +24,9 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
   bool _loading = true;
   Timer? _t;
   WebSocket? _ws;
-  final List<_LogLine> _live = [];
+  final List<String> _live = [];
   bool _streaming = false;
-  ScrollController _scroll = ScrollController();
-  final int _maxLines = 400;
+  final int _maxLines = 500;
 
   @override
   void initState() {
@@ -38,7 +39,6 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
   void dispose() {
     _t?.cancel();
     _stopStream();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -47,7 +47,7 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
       final st = await context.read<AuthProvider>().api!.botStatus(widget.fname);
       if (!mounted) return;
       setState(() { _st = st; _loading = false; });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
     }
@@ -68,13 +68,8 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
             if (line.isNotEmpty) {
               if (!mounted) return;
               setState(() {
-                _live.add(_LogLine(line, logColor(line)));
+                _live.add(line);
                 if (_live.length > _maxLines) _live.removeAt(0);
-              });
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scroll.hasClients) {
-                  _scroll.jumpTo(_scroll.position.maxScrollExtent);
-                }
               });
             }
           }
@@ -82,7 +77,8 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
       }, onDone: () { if (mounted) setState(() => _streaming = false); },
          onError: (_) { if (mounted) setState(() => _streaming = false); });
     } catch (e) {
-      if (mounted) { snack(context, 'Stream error: $e', error: true); setState(() => _streaming = false); }
+      if (mounted) { snack(context, friendlyError(e), error: true);
+        setState(() => _streaming = false); }
     }
   }
 
@@ -96,51 +92,55 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
     final api = context.read<AuthProvider>().api!;
     try {
       switch (action) {
-        case 'start': await api.botStart(widget.fname); snack(context, 'Started'); break;
-        case 'stop': await api.botStop(widget.fname); snack(context, 'Stopped'); break;
-        case 'restart': await api.botRestart(widget.fname); snack(context, 'Restarted'); break;
+        case 'start': await api.botStart(widget.fname); break;
+        case 'stop': await api.botStop(widget.fname); break;
+        case 'restart': await api.botRestart(widget.fname); break;
       }
       _load();
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _showLogs() async {
     try {
-      final r = await context.read<AuthProvider>().api!.botLogs(widget.fname, lines: 300);
+      final r = await context.read<AuthProvider>().api!.botLogs(widget.fname, lines: 500);
       final lines = (r['lines'] as List? ?? []).cast<String>();
       if (!mounted) return;
-      _showTextDialog('Recent logs', lines.join('\n'));
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      await showDialog(context: context, builder: (_) => Dialog(
+        backgroundColor: C.bg,
+        insetPadding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: LogViewer(lines: lines, title: 'Recent logs', height: 500),
+        ),
+      ));
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _showCrashes() async {
     try {
       final r = await context.read<AuthProvider>().api!.botCrashes(widget.fname);
       if (!mounted) return;
-      _showTextDialog('Crash history', const JsonEncoder.withIndent('  ').convert(r));
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
-  }
-
-  void _showTextDialog(String title, String content) {
-    showDialog(context: context, builder: (_) => AlertDialog(
-      backgroundColor: C.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      content: SizedBox(width: double.maxFinite,
-        child: SingleChildScrollView(child: SelectableText(content,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 11)))),
-      actions: [TextButton(onPressed: () => Navigator.pop(context),
-          child: const Text('Close'))],
-    ));
+      final lines = const JsonEncoder.withIndent('  ').convert(r).split('\n');
+      await showDialog(context: context, builder: (_) => Dialog(
+        backgroundColor: C.bg,
+        insetPadding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: LogViewer(lines: lines, title: 'Crash history', height: 500),
+        ),
+      ));
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _clearLogs() async {
-    if (!await confirm(context, 'Clear logs?', danger: true)) return;
+    if (!await confirm(context, 'حذف السجلات؟', danger: true)) return;
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!.botLogsClear(widget.fname);
-      if (mounted) snack(context, 'Cleared');
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      if (mounted) { snack(context, 'تم'); setState(() => _live.clear()); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _setPolicy() async {
@@ -149,7 +149,7 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const ListTile(title: Text('Restart policy',
+        const ListTile(title: Text('سياسة إعادة التشغيل',
             style: TextStyle(fontWeight: FontWeight.w700))),
         const Divider(height: 1),
         ...['always', 'on-failure', 'never'].map((m) => ListTile(
@@ -160,47 +160,47 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
           onTap: () => Navigator.pop(context, m))),
       ])));
     if (mode == null || !mounted) return;
-    final delay = await promptInt(context, 'Restart delay (seconds)', initial: 5);
+    final delay = await promptInt(context, 'تأخير إعادة التشغيل (ثواني)', initial: 5);
     if (delay == null || !mounted) return;
-    final mx = await promptInt(context, 'Max fast crashes', initial: 5);
+    final mx = await promptInt(context, 'أقصى انهيارات سريعة', initial: 5);
     if (mx == null || !mounted) return;
     try {
       await context.read<AuthProvider>().api!
           .botSetPolicy(widget.fname, mode, delay, mx);
-      if (mounted) { snack(context, 'Policy saved'); _load(); }
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      if (mounted) { snack(context, 'تم'); _load(); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _setEnv() async {
-    final k = await promptText(context, 'Environment key');
+    final k = await promptText(context, 'اسم المتغير');
     if (k == null || k.isEmpty || !mounted) return;
-    final v = await promptText(context, 'Value for $k');
+    final v = await promptText(context, 'القيمة');
     if (v == null || !mounted) return;
     try {
       await context.read<AuthProvider>().api!.botSetEnv(widget.fname, k, v);
-      if (mounted) { snack(context, 'Env set'); _load(); }
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      if (mounted) { snack(context, 'تم'); _load(); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _deleteEnv() async {
-    final k = await promptText(context, 'Key to delete');
+    final k = await promptText(context, 'المفتاح المراد حذفه');
     if (k == null || k.isEmpty || !mounted) return;
     try {
       await context.read<AuthProvider>().api!.botDeleteEnv(widget.fname, k);
-      if (mounted) { snack(context, 'Env removed'); _load(); }
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      if (mounted) { snack(context, 'تم'); _load(); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   Future<void> _removeBot() async {
-    if (!await confirm(context, 'Remove ${widget.fname}?', danger: true)) return;
+    if (!await confirm(context, 'حذف ${widget.fname}؟', danger: true)) return;
     if (!mounted) return;
-    final df = await confirm(context, 'Also delete the bot file?');
+    final df = await confirm(context, 'حذف الملف أيضاً؟');
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!
           .botRemove(widget.fname, deleteFile: df);
-      if (mounted) { snack(context, 'Bot removed'); Navigator.pop(context); }
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
+      if (mounted) { snack(context, 'تم الحذف'); Navigator.pop(context); }
+    } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
 
   @override
@@ -218,50 +218,38 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
             if (_st != null) ...[
               _statusCard(_st!),
               const SizedBox(height: 14),
-              SectionCard(title: 'Control', child: Wrap(spacing: 8, runSpacing: 8, children: [
-                _action(Icons.play_arrow, 'Start', C.success, () => _act('start')),
-                _action(Icons.restart_alt, 'Restart', C.warning, () => _act('restart')),
-                _action(Icons.stop, 'Stop', C.info, () => _act('stop')),
+              SectionCard(title: 'التحكم', child: Wrap(spacing: 8, runSpacing: 8, children: [
+                _action(Icons.play_arrow, 'تشغيل', C.success, () => _act('start')),
+                _action(Icons.restart_alt, 'إعادة', C.warning, () => _act('restart')),
+                _action(Icons.stop, 'إيقاف', C.info, () => _act('stop')),
               ])),
               const SizedBox(height: 14),
-              SectionCard(title: 'Live logs', trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(_streaming ? 'streaming…' : 'stopped',
-                    style: TextStyle(color: _streaming ? C.success : C.muted,
-                        fontSize: 10, fontWeight: FontWeight.w700)),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _streaming ? () => setState(_stopStream) : _startStream,
-                  icon: Icon(_streaming ? Icons.stop_circle : Icons.play_circle,
-                      color: _streaming ? C.danger : C.success),
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                ),
-              ]), child: Container(
-                height: 260,
-                decoration: BoxDecoration(
-                  color: Colors.black, borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: C.border),
-                ),
-                padding: const EdgeInsets.all(10),
-                child: _live.isEmpty
-                  ? const Center(child: Text('No output',
-                      style: TextStyle(color: C.muted, fontSize: 11,
-                          fontFamily: 'monospace')))
-                  : ListView.builder(controller: _scroll,
-                      itemCount: _live.length,
-                      itemBuilder: (_, i) => Text(_live[i].text,
-                        style: TextStyle(color: _live[i].color,
-                            fontSize: 11, fontFamily: 'monospace', height: 1.35)),
-                    ),
-              )),
+              SectionCard(
+                title: 'سجل مباشر',
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_streaming ? 'streaming…' : 'متوقف',
+                      style: TextStyle(color: _streaming ? C.success : C.muted,
+                          fontSize: 10, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _streaming ? () => setState(_stopStream) : _startStream,
+                    icon: Icon(_streaming ? Icons.stop_circle : Icons.play_circle,
+                        color: _streaming ? C.danger : C.success),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ]),
+                child: LogViewer(lines: _live, title: widget.fname, height: 260),
+              ),
               const SizedBox(height: 14),
-              SectionCard(title: 'More', child: Column(children: [
-                _listAction(Icons.list_alt, 'Recent logs (last 300)', _showLogs),
-                _listAction(Icons.bug_report_outlined, 'Crash history', _showCrashes),
-                _listAction(Icons.cleaning_services_outlined, 'Clear logs', _clearLogs,
+              SectionCard(title: 'المزيد', child: Column(children: [
+                _listAction(Icons.list_alt, 'عرض السجلات الأخيرة', _showLogs),
+                _listAction(Icons.bug_report_outlined, 'سجل الانهيارات', _showCrashes),
+                _listAction(Icons.cleaning_services_outlined, 'مسح السجلات', _clearLogs,
                     danger: true),
-                _listAction(Icons.autorenew, 'Set restart policy', _setPolicy),
-                _listAction(Icons.vpn_key_outlined, 'Set environment variable', _setEnv),
-                _listAction(Icons.key_off_outlined, 'Delete environment variable', _deleteEnv),
+                _listAction(Icons.autorenew, 'سياسة إعادة التشغيل', _setPolicy),
+                _listAction(Icons.vpn_key_outlined, 'إضافة متغير بيئة', _setEnv),
+                _listAction(Icons.key_off_outlined, 'حذف متغير بيئة', _deleteEnv),
               ])),
             ],
             const SizedBox(height: 30),
@@ -314,10 +302,4 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
           color: danger ? C.danger : null, fontWeight: FontWeight.w600)),
       trailing: const Icon(Icons.chevron_right, color: C.muted, size: 18),
       onTap: onTap);
-}
-
-class _LogLine {
-  final String text;
-  final Color color;
-  _LogLine(this.text, this.color);
 }

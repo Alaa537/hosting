@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../models/models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
+import '../utils/error_utils.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -42,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _err = e.toString(); _loading = false; });
+      setState(() { _err = friendlyError(e); _loading = false; });
     }
   }
 

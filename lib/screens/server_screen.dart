@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../models/models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
+import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
 
@@ -18,11 +19,14 @@ class _ServerScreenState extends State<ServerScreen> {
   ServerResources? _r;
   bool _loading = true;
   String? _err;
+  bool _noServer = false;
   Timer? _t;
 
   @override
-  void initState() { super.initState(); _load();
-    _t = Timer.periodic(const Duration(seconds: 4), (_) => _load()); }
+  void initState() {
+    super.initState(); _load();
+    _t = Timer.periodic(const Duration(seconds: 4), (_) => _load());
+  }
 
   @override
   void dispose() { _t?.cancel(); super.dispose(); }
@@ -31,34 +35,27 @@ class _ServerScreenState extends State<ServerScreen> {
     try {
       final r = await context.read<AuthProvider>().api!.serverResources();
       if (!mounted) return;
-      setState(() { _r = r; _err = null; _loading = false; });
+      setState(() { _r = r; _err = null; _noServer = false; _loading = false; });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _err = e.toString(); _loading = false; });
+      final msg = friendlyError(e);
+      setState(() {
+        _err = msg;
+        _noServer = msg.contains('لا يوجد سيرفر');
+        _loading = false;
+      });
     }
   }
 
   Future<void> _power(String sig, {bool danger = false, String? confirmMsg}) async {
-    if (danger && !await confirm(context, 'Confirm', msg: confirmMsg, danger: true)) return;
+    if (danger && !await confirm(context, 'تأكيد', msg: confirmMsg, danger: true)) return;
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!.power(sig);
-      if (mounted) snack(context, 'Signal "$sig" sent');
+      if (mounted) snack(context, 'تم إرسال الأمر: $sig');
       _load();
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
-    }
-  }
-
-  Future<void> _command() async {
-    final c = await promptText(context, 'Send command', hint: 'say Hello');
-    if (c == null || c.isEmpty) return;
-    if (!mounted) return;
-    try {
-      await context.read<AuthProvider>().api!.sendCommand(c);
-      if (mounted) snack(context, 'Command sent');
-    } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
@@ -68,9 +65,9 @@ class _ServerScreenState extends State<ServerScreen> {
       final cur = auth.user?.autoRestart ?? false;
       await auth.api!.setAutoRestart(!cur);
       await auth.refreshMe();
-      if (mounted) snack(context, 'Auto-restart ${!cur ? "enabled" : "disabled"}');
+      if (mounted) snack(context, !cur ? 'تم تشغيل إعادة التشغيل التلقائي' : 'تم إيقافه');
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
@@ -88,7 +85,7 @@ class _ServerScreenState extends State<ServerScreen> {
           builder: (_, ctrl) => ListView(
             controller: ctrl, padding: const EdgeInsets.all(16),
             children: [
-              const Text('Startup variables',
+              const Text('متغيرات بدء التشغيل',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text(data['command'] ?? '',
@@ -103,18 +100,15 @@ class _ServerScreenState extends State<ServerScreen> {
                     maxLines: 2, overflow: TextOverflow.ellipsis),
                 trailing: const Icon(Icons.edit, color: C.primary, size: 18),
                 onTap: () async {
-                  final n = await promptText(context, 'Edit ${v['key']}',
+                  final n = await promptText(context, 'تعديل ${v['key']}',
                       initial: '${v['value'] ?? ''}');
                   if (n != null && mounted) {
                     try {
                       await context.read<AuthProvider>().api!
                           .setStartupVar(v['key'], n);
-                      if (mounted) {
-                        Navigator.pop(context);
-                        snack(context, 'Updated');
-                      }
+                      if (mounted) { Navigator.pop(context); snack(context, 'تم الحفظ'); }
                     } catch (e) {
-                      if (mounted) snack(context, e.toString(), error: true);
+                      if (mounted) snack(context, friendlyError(e), error: true);
                     }
                   }
                 },
@@ -122,20 +116,19 @@ class _ServerScreenState extends State<ServerScreen> {
             ],
           )));
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
   Future<void> _reinstall() async {
-    if (!await confirm(context, 'Reinstall server?',
-        msg: 'This WILL WIPE all server files and start fresh.\n\nAre you absolutely sure?',
-        danger: true)) return;
+    if (!await confirm(context, 'إعادة تثبيت السيرفر؟',
+        msg: 'سيتم مسح كل الملفات والبدء من جديد.', danger: true)) return;
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!.reinstall();
-      if (mounted) snack(context, 'Reinstall started');
+      if (mounted) snack(context, 'بدأت إعادة التثبيت');
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
@@ -150,24 +143,24 @@ class _ServerScreenState extends State<ServerScreen> {
         : RefreshIndicator(onRefresh: _load, color: C.primary,
           backgroundColor: C.surface,
           child: ListView(padding: const EdgeInsets.all(16), children: [
-            if (_err != null) _errCard(),
+            if (_noServer) _noServerCard(),
+            if (_err != null && !_noServer) _errCard(),
             if (_r != null) ...[
               _statsCard(_r!),
               const SizedBox(height: 16),
-              SectionCard(title: 'Power control', child: Wrap(spacing: 8, runSpacing: 8, children: [
-                _action(Icons.play_arrow, 'Start', C.success, () => _power('start')),
-                _action(Icons.restart_alt, 'Restart', C.warning, () => _power('restart')),
-                _action(Icons.stop, 'Stop', C.info, () => _power('stop')),
+              SectionCard(title: 'التحكم', child: Wrap(spacing: 8, runSpacing: 8, children: [
+                _action(Icons.play_arrow, 'تشغيل', C.success, () => _power('start')),
+                _action(Icons.restart_alt, 'إعادة', C.warning, () => _power('restart')),
+                _action(Icons.stop, 'إيقاف', C.info, () => _power('stop')),
                 _action(Icons.power_settings_new, 'Kill', C.danger,
                     () => _power('kill', danger: true,
-                        confirmMsg: 'Force kill the server process?')),
+                        confirmMsg: 'إجبار الإيقاف؟')),
               ])),
               const SizedBox(height: 14),
-              SectionCard(title: 'Actions', child: Column(children: [
-                _listAction(Icons.terminal, 'Send console command', _command),
-                _listAction(Icons.autorenew, 'Toggle auto-restart', _autoRestart),
-                _listAction(Icons.tune, 'Startup variables', _startupVars),
-                _listAction(Icons.warning_amber_rounded, 'Reinstall server', _reinstall,
+              SectionCard(title: 'إعدادات', child: Column(children: [
+                _listAction(Icons.autorenew, 'إعادة التشغيل التلقائي', _autoRestart),
+                _listAction(Icons.tune, 'متغيرات البدء', _startupVars),
+                _listAction(Icons.warning_amber_rounded, 'إعادة التثبيت', _reinstall,
                     danger: true),
               ])),
             ],
@@ -176,6 +169,25 @@ class _ServerScreenState extends State<ServerScreen> {
         )),
     );
   }
+
+  Widget _noServerCard() => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: C.warning.withValues(alpha: .1),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: C.warning.withValues(alpha: .4)),
+    ),
+    child: Column(children: [
+      const Icon(Icons.dns_outlined, color: C.warning, size: 36),
+      const SizedBox(height: 10),
+      const Text('لا يوجد سيرفر',
+          style: TextStyle(color: C.warning, fontSize: 16, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 6),
+      const Text('لم يتم تخصيص سيرفر لحسابك بعد.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: C.muted, fontSize: 12)),
+    ]),
+  );
 
   Widget _errCard() => Container(
     padding: const EdgeInsets.all(14),

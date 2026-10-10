@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../utils/device_lock.dart';
 import '../utils/constants.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -26,6 +27,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _err = 'Password must be at least 8 characters');
       return;
     }
+    final lockErr = await DeviceLock.check(_u.text.trim());
+    if (lockErr != null) {
+      setState(() => _err = lockErr);
+      return;
+    }
     setState(() { _busy = true; _err = null; _pending = null; });
     final e = await context.read<AuthProvider>().register(
         _u.text.trim(), _p.text, _i.text.trim());
@@ -34,6 +40,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _busy = false;
       if (e != null && e.startsWith('PENDING:')) _pending = e.substring(8);
       else _err = e;
+      if (e == null) await DeviceLock.lock(_u.text.trim());
     });
   }
 

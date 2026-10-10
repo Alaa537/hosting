@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
+import '../widgets/banner_widget.dart';
 import 'dashboard_screen.dart';
 import 'server_screen.dart';
 import 'files_screen.dart';
@@ -21,8 +24,18 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final bs = context.watch<AuthProvider>().bootstrap_;
+    final banners = bs?.banners ?? const [];
+
     return Scaffold(
-      body: IndexedStack(index: _i, children: _tabs),
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          if (banners.isNotEmpty)
+            ...banners.map((b) => BannerStrip(banner: b)),
+          Expanded(child: IndexedStack(index: _i, children: _tabs)),
+        ]),
+      ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: C.border)),

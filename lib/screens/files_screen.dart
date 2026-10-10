@@ -5,13 +5,15 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/auth_provider.dart';
 import '../models/models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
+import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import '../widgets/code_viewer.dart';
 
 class FilesScreen extends StatefulWidget {
   const FilesScreen({super.key});
@@ -40,7 +42,7 @@ class _FilesScreenState extends State<FilesScreen> {
       setState(() { _items = l; _err = null; _loading = false; });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _err = e.toString(); _loading = false; });
+      setState(() { _err = friendlyError(e); _loading = false; });
     }
   }
 
@@ -67,28 +69,33 @@ class _FilesScreenState extends State<FilesScreen> {
       context: context, backgroundColor: C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      builder: (_) => SafeArea(child: SingleChildScrollView(child: Column(
+          mainAxisSize: MainAxisSize.min, children: [
         const SizedBox(height: 8),
         Container(width: 40, height: 4,
           decoration: BoxDecoration(color: C.border,
               borderRadius: BorderRadius.circular(4))),
         const SizedBox(height: 12),
         ListTile(
-          leading: const Icon(Icons.description_outlined, color: C.primary),
+          leading: Container(width: 42, height: 42,
+            decoration: BoxDecoration(color: C.primary.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(10)),
+            child: Icon(_fileIcon(f.name), color: C.primary)),
           title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.w700)),
           subtitle: Text('${fSize(f.size)} · ${fDate(f.modifiedAt)}',
               style: const TextStyle(color: C.muted, fontSize: 11)),
         ),
         const Divider(height: 1),
-        _sheet(Icons.visibility_outlined, 'View content', 'view'),
-        _sheet(Icons.download_outlined, 'Download & share', 'download'),
-        _sheet(Icons.drive_file_rename_outline, 'Rename', 'rename'),
-        _sheet(Icons.drive_file_move_outline, 'Move', 'move'),
-        _sheet(Icons.archive_outlined, 'Extract archive', 'extract'),
-        _sheet(Icons.lock_outline, 'Change permissions', 'chmod'),
-        _sheet(Icons.delete_outline, 'Delete', 'delete', danger: true),
+        _sheet(Icons.visibility_outlined, 'عرض المحتوى', 'view'),
+        _sheet(Icons.edit_outlined, 'تعديل الملف', 'edit'),
+        _sheet(Icons.download_outlined, 'تنزيل ومشاركة', 'download'),
+        _sheet(Icons.drive_file_rename_outline, 'إعادة تسمية', 'rename'),
+        _sheet(Icons.drive_file_move_outline, 'نقل', 'move'),
+        _sheet(Icons.archive_outlined, 'استخراج', 'extract'),
+        _sheet(Icons.lock_outline, 'تغيير الصلاحيات', 'chmod'),
+        _sheet(Icons.delete_outline, 'حذف', 'delete', danger: true),
         const SizedBox(height: 8),
-      ])),
+      ]))),
     );
     if (!mounted || action == null) return;
     final api = context.read<AuthProvider>().api!;
@@ -96,47 +103,119 @@ class _FilesScreenState extends State<FilesScreen> {
       switch (action) {
         case 'view':
           final c = await api.readFile(full);
-          if (mounted) _showText(context, f.name, c);
+          if (mounted) _showCode(f.name, c, editable: false);
+          break;
+        case 'edit':
+          final c = await api.readFile(full);
+          if (!mounted) return;
+          final edited = await _showCode(f.name, c, editable: true);
+          if (edited != null && edited != c && mounted) {
+            await api.writeFile(full, edited);
+            if (mounted) snack(context, 'تم الحفظ');
+          }
           break;
         case 'download':
           await _download(full, f.name);
           break;
         case 'rename':
-          final n = await promptText(context, 'Rename', initial: f.name);
+          final n = await promptText(context, 'إعادة تسمية', initial: f.name);
           if (n != null && n != f.name && mounted) {
             await api.rename(_path, [f.name], [n]);
-            if (mounted) { snack(context, 'Renamed'); _load(); }
+            if (mounted) { snack(context, 'تم'); _load(); }
           }
           break;
         case 'move':
-          final d = await promptText(context, 'Move to directory', hint: '/');
+          final d = await promptText(context, 'نقل إلى مجلد', hint: '/');
           if (d != null && d.isNotEmpty && mounted) {
             await api.move(_path, [f.name], d);
-            if (mounted) { snack(context, 'Moved'); _load(); }
+            if (mounted) { snack(context, 'تم'); _load(); }
           }
           break;
         case 'extract':
           await api.extract(_path, [f.name]);
-          if (mounted) { snack(context, 'Extracted'); _load(); }
+          if (mounted) { snack(context, 'تم الاستخراج'); _load(); }
           break;
         case 'chmod':
-          final m = await promptText(context, 'Mode', initial: '644');
+          final m = await promptText(context, 'الوضع (مثال 644)', initial: '644');
           if (m != null && m.isNotEmpty && mounted) {
             await api.chmod(_path, [f.name], m);
-            if (mounted) { snack(context, 'chmod applied'); _load(); }
+            if (mounted) { snack(context, 'تم'); _load(); }
           }
           break;
         case 'delete':
-          if (await confirm(context, 'Delete "${f.name}"?', danger: true)) {
+          if (await confirm(context, 'حذف "${f.name}"؟', danger: true)) {
             if (!mounted) return;
             await api.deleteFiles(_path, [f.name]);
-            if (mounted) { snack(context, 'Deleted'); _load(); }
+            if (mounted) { snack(context, 'تم الحذف'); _load(); }
           }
           break;
       }
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
+  }
+
+  /// Shows code in a dialog. Returns edited content when [editable] == true
+  /// and the user taps Save; otherwise returns null.
+  Future<String?> _showCode(String name, String content,
+      {bool editable = false}) async {
+    final ctrl = TextEditingController(text: content);
+    return showDialog<String>(context: context, builder: (_) => Dialog(
+      backgroundColor: C.bg,
+      insetPadding: const EdgeInsets.all(12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * .85,
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Expanded(child: SingleChildScrollView(
+            child: editable
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A24),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: C.border),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    controller: ctrl,
+                    maxLines: null,
+                    minLines: 12,
+                    style: const TextStyle(
+                        fontFamily: 'monospace', fontSize: 12.5,
+                        color: Colors.white, height: 1.5),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'اكتب الكود هنا…',
+                    ),
+                  ),
+                )
+              : CodeViewer(code: content, filename: name),
+          )),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: C.muted,
+                side: const BorderSide(color: C.border),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: Text(editable ? 'إلغاء' : 'إغلاق'),
+            )),
+            if (editable) ...[
+              const SizedBox(width: 10),
+              Expanded(child: ElevatedButton(
+                onPressed: () => Navigator.pop(context, ctrl.text),
+                child: const Text('حفظ'),
+              )),
+            ],
+          ]),
+        ]),
+      ),
+    ));
   }
 
   Widget _sheet(IconData i, String t, String v, {bool danger = false}) => ListTile(
@@ -144,24 +223,11 @@ class _FilesScreenState extends State<FilesScreen> {
     title: Text(t, style: TextStyle(color: danger ? C.danger : null)),
     onTap: () => Navigator.pop(context, v));
 
-  void _showText(BuildContext ctx, String title, String content) {
-    showDialog(context: ctx, builder: (_) => AlertDialog(
-      backgroundColor: C.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      content: SizedBox(width: double.maxFinite,
-        child: SingleChildScrollView(child: SelectableText(content,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 11)))),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx),
-          child: const Text('Close'))],
-    ));
-  }
-
   Future<void> _download(String full, String name) async {
     try {
       final api = context.read<AuthProvider>().api!;
       final url = await api.downloadUrl(full);
-      snackInfo(context, 'Downloading $name…');
+      snackInfo(context, 'جاري التنزيل…');
       final dir = await getTemporaryDirectory();
       final out = File('${dir.path}/$name');
       final res = await http.get(Uri.parse(url));
@@ -169,58 +235,49 @@ class _FilesScreenState extends State<FilesScreen> {
       if (!mounted) return;
       await Share.shareXFiles([XFile(out.path)], text: name);
     } catch (e) {
-      if (mounted) snack(context, 'Download failed: $e', error: true);
+      if (mounted) snack(context, 'فشل التنزيل: ${friendlyError(e)}', error: true);
     }
   }
 
   Future<void> _upload() async {
-    final ctrl = TextEditingController();
-    final p = await showDialog<String>(context: context, builder: (_) => AlertDialog(
-      backgroundColor: C.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Upload file'),
-      content: TextField(controller: ctrl, autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Absolute path on phone',
-          hintText: '/storage/emulated/0/Download/file.zip')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: C.muted))),
-        ElevatedButton(onPressed: () => Navigator.pop(context, ctrl.text),
-            child: const Text('Upload')),
-      ],
-    ));
-    if (p == null || p.isEmpty || !mounted) return;
-    final f = File(p);
-    if (!await f.exists()) { if (mounted) snack(context, 'File not found', error: true); return; }
     try {
-      snackInfo(context, 'Uploading ${f.uri.pathSegments.last}…');
+      final result = await FilePicker.platform.pickFiles(withData: false);
+      if (result == null || result.files.isEmpty) return;
+      final path = result.files.single.path;
+      if (path == null) return;
+      final f = File(path);
+      if (!await f.exists()) {
+        if (mounted) snack(context, 'الملف غير موجود', error: true);
+        return;
+      }
+      if (!mounted) return;
+      snackInfo(context, 'جاري الرفع…');
       await context.read<AuthProvider>().api!.uploadSmall(f, _path);
-      if (mounted) { snack(context, 'Uploaded'); _load(); }
+      if (mounted) { snack(context, 'تم الرفع'); _load(); }
     } catch (e) {
-      if (mounted) snack(context, 'Upload failed: $e', error: true);
+      if (mounted) snack(context, 'فشل الرفع: ${friendlyError(e)}', error: true);
     }
   }
 
   Future<void> _newFolder() async {
-    final n = await promptText(context, 'New folder name');
+    final n = await promptText(context, 'اسم المجلد الجديد');
     if (n == null || n.isEmpty || !mounted) return;
     try {
       await context.read<AuthProvider>().api!.mkdir(_path, n);
-      if (mounted) { snack(context, 'Folder created'); _load(); }
+      if (mounted) { snack(context, 'تم الإنشاء'); _load(); }
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
   Future<void> _compress() async {
-    final n = await promptText(context, 'Item to compress');
+    final n = await promptText(context, 'اسم الملف/المجلد للضغط');
     if (n == null || n.isEmpty || !mounted) return;
     try {
       await context.read<AuthProvider>().api!.compress(_path, [n]);
-      if (mounted) { snack(context, 'Compressed'); _load(); }
+      if (mounted) { snack(context, 'تم الضغط'); _load(); }
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
@@ -236,7 +293,8 @@ class _FilesScreenState extends State<FilesScreen> {
         actions: [
           IconButton(onPressed: _path == '/' ? null : _up,
               icon: Icon(Icons.arrow_upward, color: _path == '/' ? C.muted : C.primary)),
-          IconButton(onPressed: _newFolder, icon: const Icon(Icons.create_new_folder_outlined, color: C.primary)),
+          IconButton(onPressed: _newFolder,
+              icon: const Icon(Icons.create_new_folder_outlined, color: C.primary)),
           IconButton(onPressed: _upload, icon: const Icon(Icons.upload, color: C.primary)),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: C.primary)),
         ],
@@ -244,12 +302,14 @@ class _FilesScreenState extends State<FilesScreen> {
       body: SafeArea(child: _loading
         ? const Center(child: CircularProgressIndicator(color: C.primary))
         : _err != null
-          ? Center(child: Text(_err!, style: const TextStyle(color: C.danger)))
+          ? Center(child: Padding(padding: const EdgeInsets.all(24),
+              child: Text(_err!, textAlign: TextAlign.center,
+                  style: const TextStyle(color: C.danger))))
           : RefreshIndicator(onRefresh: _load, color: C.primary,
               backgroundColor: C.surface,
               child: _items.isEmpty
                 ? ListView(children: const [SizedBox(height: 100),
-                    EmptyState(icon: Icons.folder_open, title: 'Empty folder')])
+                    EmptyState(icon: Icons.folder_open, title: 'المجلد فارغ')])
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: _items.length,
@@ -261,7 +321,7 @@ class _FilesScreenState extends State<FilesScreen> {
         backgroundColor: C.accent,
         foregroundColor: Colors.black,
         icon: const Icon(Icons.archive_outlined),
-        label: const Text('Compress', style: TextStyle(fontWeight: FontWeight.w700)),
+        label: const Text('ضغط', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -318,24 +378,24 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _rename(FileItem f) async {
-    final n = await promptText(context, 'Rename', initial: f.name);
+    final n = await promptText(context, 'إعادة تسمية', initial: f.name);
     if (n == null || n == f.name || !mounted) return;
     try {
       await context.read<AuthProvider>().api!.rename(_path, [f.name], [n]);
-      if (mounted) { snack(context, 'Renamed'); _load(); }
+      if (mounted) { snack(context, 'تم'); _load(); }
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 
   Future<void> _delete(FileItem f) async {
-    if (!await confirm(context, 'Delete "${f.name}"?', danger: true)) return;
+    if (!await confirm(context, 'حذف "${f.name}"؟', danger: true)) return;
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!.deleteFiles(_path, [f.name]);
-      if (mounted) { snack(context, 'Deleted'); _load(); }
+      if (mounted) { snack(context, 'تم الحذف'); _load(); }
     } catch (e) {
-      if (mounted) snack(context, e.toString(), error: true);
+      if (mounted) snack(context, friendlyError(e), error: true);
     }
   }
 }

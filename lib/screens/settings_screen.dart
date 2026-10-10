@@ -14,20 +14,16 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
-        SectionCard(title: 'Connection', child: Column(children: [
-          KVRow(k: 'Base URL', v: Text(auth.baseUrl,
-              style: const TextStyle(fontSize: 12))),
-          KVRow(k: 'Token', v: Text(auth.api?.token != null ? 'saved' : 'none',
-              style: TextStyle(color: auth.api?.token != null ? C.success : C.muted))),
+        SectionCard(title: 'الحالة', child: Column(children: [
+          KVRow(k: 'الحالة',
+              v: Text(auth.api?.token != null ? 'متصل' : 'غير متصل',
+                  style: TextStyle(
+                    color: auth.api?.token != null ? C.success : C.muted,
+                    fontWeight: FontWeight.w700))),
         ])),
         const SizedBox(height: 14),
         SectionCard(title: 'Actions', child: Column(children: [
-          ListTile(contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.link, color: C.primary),
-            title: const Text('Change API base URL',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            trailing: const Icon(Icons.chevron_right, color: C.muted),
-            onTap: () => _changeBase(context, auth)),
+
           ListTile(contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.password, color: C.primary),
             title: const Text('Change my password',
@@ -44,15 +40,6 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 20),
       ])),
     );
-  }
-
-  Future<void> _changeBase(BuildContext ctx, AuthProvider auth) async {
-    final n = await promptText(ctx, 'New base URL', initial: auth.baseUrl);
-    if (n == null || n.trim().isEmpty || !ctx.mounted) return;
-    if (!await confirm(ctx, 'Change server URL?',
-        msg: 'You will be signed out and must log in again.')) return;
-    if (!ctx.mounted) return;
-    await auth.setBase(n.trim());
   }
 
   Future<void> _changePassword(BuildContext ctx, AuthProvider auth) async {

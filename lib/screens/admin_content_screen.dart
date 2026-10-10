@@ -91,8 +91,7 @@ class _ModalsTabState extends State<_ModalsTab> {
     if (!mounted) return;
     final force = await confirm(context, 'إجباري (لا يمكن إغلاقه)؟');
     if (!mounted) return;
-    final once = await confirm(context, 'يظهر مرة واحدة فقط؟',
-        default: true);
+    final once = await confirm(context, 'يظهر مرة واحدة فقط؟');
     if (!mounted) return;
     final showTo = await _pick(context, 'الجمهور',
         ['all', 'new_users', 'paying', 'admin']);

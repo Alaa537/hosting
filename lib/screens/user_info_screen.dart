@@ -6,7 +6,6 @@ import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
-import '../widgets/log_viewer.dart';
 import 'sessions_screen.dart';
 
 class UserInfoScreen extends StatefulWidget {

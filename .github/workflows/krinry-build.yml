@@ -76,115 +76,45 @@ jobs:
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
 
-              private val VPN_PKGS = listOf(
-                  "com.wireguard.android", "net.openvpn.openvpn",
-                  "com.openvpn.openvpn", "de.blinkt.openvpn",
-                  "com.nordvpn.android", "com.expressvpn.vpn",
-                  "com.protonvpn.android", "com.surfshark.vpnclient.android",
-                  "com.privateinternetaccess.android", "com.psiphon3",
-                  "org.torproject.torbrowser", "org.torproject.android",
-                  "com.cloudflare.onedotonedotonedotone",
-                  "com.tailscale.ipn", "com.windscribe.vpn",
-                  "com.hotspotshield.vpn", "com.tunnelbear.android",
-                  "free.vpn.unblock.proxy.turbovpn", "com.vpn.free.proxy",
-                  "io.psiphon", "com.vpnhood.vpnclient",
-                  "com.anonytun.android", "com.anyconnect",
-                  "com.cisco.anyconnect.vpn.android.avf",
-                  "com.turbo.vpn", "com.vpn.proxy.master",
-                  "com.free.vpn.super", "com.vpn.unlimited"
-              )
-
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CH)
                       .setMethodCallHandler { call, result ->
                           when (call.method) {
                               "isVpnActive"        -> result.success(isVpnActive())
-                              "hasVpnInterface"    -> result.success(hasVpnInterface())
-                              "hasVpnRoute"        -> result.success(hasVpnRoute())
-                              "hasSuspiciousDns"   -> result.success(hasSuspiciousDns())
-                              "hasVpnApp"          -> result.success(hasVpnApp())
+                              "hasVpnInterface"    -> result.success(false)
+                              "hasVpnRoute"        -> result.success(false)
+                              "hasSuspiciousDns"   -> result.success(false)
+                              "hasVpnApp"          -> result.success(false)
                               "getHttpProxy"       -> result.success(getHttpProxy())
                               "getRunningProcs"    -> result.success(getRunningProcs())
-                              "hasUserCaInstalled" -> result.success(hasUserCaInstalled())
+                              "hasUserCaInstalled" -> result.success(false)
                               "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
                               else -> result.notImplemented()
                           }
                       }
               }
 
+              /**
+               * Uses Android's official NetworkCapabilities API — the ONLY
+               * reliable way to detect an active VPN. No false positives from
+               * installed apps, private DNS, or pre-existing interfaces.
+               */
               private fun isVpnActive(): Boolean {
                   return try {
                       val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                          val net = cm.activeNetwork ?: return false
-                          val caps = cm.getNetworkCapabilities(net) ?: return false
-                          if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true
-                          if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                              && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true
-                      }
-                      false
-                  } catch (_: Exception) { false }
-              }
-
-              private fun hasVpnInterface(): Boolean {
-                  return try {
-                      java.net.NetworkInterface.getNetworkInterfaces().toList().any {
-                          val n = it.name.lowercase()
-                          n.startsWith("tun") || n.startsWith("tap") ||
-                          n.startsWith("ppp") || n.startsWith("wg") ||
-                          n.startsWith("utun")
-                      }
-                  } catch (_: Exception) { false }
-              }
-
-              private fun hasVpnRoute(): Boolean {
-                  return try {
-                      val f = File("/proc/net/route")
-                      if (!f.exists()) return false
-                      var found = false
-                      BufferedReader(FileReader(f)).use { r ->
-                          r.readLine()
-                          var line = r.readLine()
-                          while (line != null) {
-                              val parts = line.split("\t", " ").filter { it.isNotBlank() }
-                              if (parts.size >= 2) {
-                                  val iface = parts[0].lowercase()
-                                  val dest  = parts[1]
-                                  if (dest == "00000000" &&
-                                      (iface.startsWith("tun") || iface.startsWith("ppp") ||
-                                       iface.startsWith("wg")  || iface.startsWith("tap"))) {
-                                      found = true
-                                      break
-                                  }
-                              }
-                              line = r.readLine()
+                          val active = cm.activeNetwork ?: return false
+                          val caps = cm.getNetworkCapabilities(active) ?: return false
+                          // TRANSPORT_VPN is set ONLY when a VPN tunnel is actually carrying traffic
+                          caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                      } else {
+                          @Suppress("DEPRECATION")
+                          cm.allNetworks.any { n ->
+                              @Suppress("DEPRECATION")
+                              cm.getNetworkCapabilities(n)
+                                  ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
                           }
-                      }
-                      found
-                  } catch (_: Exception) { false }
-              }
-
-              private fun hasSuspiciousDns(): Boolean {
-                  return try {
-                      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                      val net = cm.activeNetwork ?: return false
-                      val lp = cm.getLinkProperties(net) ?: return false
-                      lp.dnsServers.any { a ->
-                          val ip = a.hostAddress ?: return@any false
-                          ip.startsWith("10.")     || ip.startsWith("127.") ||
-                          ip.startsWith("192.168.") || ip.startsWith("172.")
-                      }
-                  } catch (_: Exception) { false }
-              }
-
-              private fun hasVpnApp(): Boolean {
-                  return try {
-                      val pm = packageManager
-                      val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                      installed.any { app ->
-                          val pkg = app.packageName.lowercase()
-                          VPN_PKGS.any { pkg.contains(it.lowercase()) }
                       }
                   } catch (_: Exception) { false }
               }
@@ -210,13 +140,6 @@ jobs:
                       }
                       sb.toString()
                   } catch (_: Exception) { "" }
-              }
-
-              private fun hasUserCaInstalled(): Boolean {
-                  return try {
-                      val f = File("/data/misc/user/0/cacerts-added")
-                      f.exists() && (f.listFiles()?.isNotEmpty() == true)
-                  } catch (_: Exception) { false }
               }
 
               private fun getApkSignatureSha256(): String? {
@@ -251,7 +174,6 @@ jobs:
           perms = '''    <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
               <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
               <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
@@ -283,7 +205,7 @@ jobs:
             flutter build appbundle --$TYPE $FLAGS
           fi
 
-      - name: Upload debug symbols (private artifact)
+      - name: Upload debug symbols (private)
         uses: actions/upload-artifact@v4
         with:
           name: debug-symbols-private

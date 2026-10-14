@@ -3,14 +3,13 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/security_service.dart';
 import '../utils/constants.dart';
 
-/// Non-dismissible dialog shown when security check fails.
 class SecurityBlockScreen extends StatelessWidget {
   final SecurityResult result;
   const SecurityBlockScreen({super.key, required this.result});
 
   @override
   Widget build(BuildContext context) {
-    final (icon, title, desc, color) = _details();
+    final d = _details();
     return Scaffold(
       backgroundColor: C.bg,
       body: SafeArea(child: Center(child: SingleChildScrollView(
@@ -20,15 +19,15 @@ class SecurityBlockScreen extends StatelessWidget {
             width: 120, height: 120,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: color.withValues(alpha: .12),
-              border: Border.all(color: color.withValues(alpha: .55), width: 2),
-              boxShadow: [BoxShadow(color: color.withValues(alpha: .35),
+              color: d.$4.withValues(alpha: .12),
+              border: Border.all(color: d.$4.withValues(alpha: .55), width: 2),
+              boxShadow: [BoxShadow(color: d.$4.withValues(alpha: .35),
                   blurRadius: 40, spreadRadius: 6)],
             ),
-            child: Center(child: Text(icon, style: const TextStyle(fontSize: 54))),
+            child: Center(child: Text(d.$1, style: const TextStyle(fontSize: 54))),
           ),
           const SizedBox(height: 26),
-          Text(title, textAlign: TextAlign.center,
+          Text(d.$2, textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
           const SizedBox(height: 14),
           Container(
@@ -36,9 +35,9 @@ class SecurityBlockScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: C.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: color.withValues(alpha: .35)),
+              border: Border.all(color: d.$4.withValues(alpha: .35)),
             ),
-            child: Text(desc, textAlign: TextAlign.center,
+            child: Text(d.$3, textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70,
                     fontSize: 14, height: 1.7)),
           ),
@@ -62,24 +61,25 @@ class SecurityBlockScreen extends StatelessWidget {
   (String, String, String, Color) _details() {
     switch (result.status) {
       case SecurityStatus.vpn:
-        return ('🚫', 'VPN مكتشف',
-            'لا يمكن استخدام التطبيق أثناء تشغيل VPN.\n'
-            'أوقف الـ VPN ثم أعد فتح التطبيق.', C.danger);
+        return ('🚫', 'VPN مكتشف', 'أوقف الـ VPN ثم أعد فتح التطبيق.', C.danger);
       case SecurityStatus.mitm:
-        return ('🛡️', 'أداة مراقبة مكتشفة',
-            'تم كشف أداة تعترض الشبكة (مثل HTTP Canary / Charles).\n'
-            'أغلقها ثم أعد فتح التطبيق.', C.danger);
+        return ('🛡️', 'أداة مراقبة', 'أغلق HTTP Canary / Charles ثم أعد الفتح.', C.danger);
       case SecurityStatus.tampered:
-        return ('⚠️', 'تطبيق معدّل',
-            'توقيع هذا التطبيق غير مطابق للتوقيع الرسمي.\n'
-            'حمّل النسخة الأصلية من القناة الرسمية.', C.danger);
+        return ('⚠️', 'تطبيق معدّل', 'التوقيع غير مطابق. حمّل النسخة الأصلية.', C.danger);
       case SecurityStatus.ssl:
-        return ('🔒', 'خطأ في شهادة الاتصال',
-            'شهادة الاتصال غير موثوقة.\n'
-            'قد تكون هناك محاولة اعتراض للاتصال.', C.danger);
+        return ('🔒', 'شهادة غير موثوقة', 'قد تكون هناك محاولة اعتراض للاتصال.', C.danger);
+      case SecurityStatus.rooted:
+        return ('🔓', 'الجهاز متجذّر', 'لا يمكن استخدام التطبيق على جهاز Rooted.', C.danger);
+      case SecurityStatus.frida:
+        return ('🎯', 'أداة تحليل مكتشفة', 'أغلق Frida وأعد فتح التطبيق.', C.danger);
+      case SecurityStatus.emulator:
+        return ('💻', 'محاكي مكتشف', 'التطبيق لا يعمل على المحاكيات.', C.danger);
+      case SecurityStatus.debugger:
+        return ('🐛', 'التطبيق تحت التصحيح', 'أغلق الـ Debugger وأعد الفتح.', C.danger);
+      case SecurityStatus.xposed:
+        return ('🧩', 'Xposed مكتشف', 'أزل Xposed Framework.', C.danger);
       case SecurityStatus.error:
-        return ('⚠️', 'خطأ في التحقق',
-            result.message ?? 'تعذّر التحقق من التطبيق.', C.warning);
+        return ('⚠️', 'خطأ', result.message ?? 'تعذّر التحقق.', C.warning);
       case SecurityStatus.ok:
         return ('✅', 'OK', '', C.success);
     }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/models.dart';
+import '../models/app_models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
@@ -16,7 +17,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
   ServerResources? _res;
-  BotList? _bots;
+  AppStatus? _app;
   String? _err;
   bool _loading = true;
 
@@ -33,11 +34,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _load() async {
     final api = context.read<AuthProvider>().api!;
     try {
-      final r = await Future.wait([api.serverResources(), api.botsList()]);
+      final r = await Future.wait([api.serverResources(), api.appStatus()]);
       if (!mounted) return;
       setState(() {
         _res = r[0] as ServerResources;
-        _bots = r[1] as BotList;
+        _app = r[1] as AppStatus;
         _err = null;
         _loading = false;
       });
@@ -65,9 +66,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: CircularProgressIndicator(color: C.primary))),
               if (_err != null) _errCard(),
               if (_res != null) _resourcesCard(_res!),
-              if (_bots != null) ...[
+              if (_app != null) ...[
                 const SizedBox(height: 16),
-                _botsCard(_bots!),
+                _appCard(_app!),
               ],
               const SizedBox(height: 24),
             ],
@@ -210,7 +211,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Text(v, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
   ]);
 
-  Widget _botsCard(BotList b) {
+  Widget _appCard(AppStatus st) {
+    final c = stateColor(st.state);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -220,44 +222,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('Bots',
+          Container(width: 10, height: 10,
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          const Text('تطبيقي',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: (b.launcherAlive ? C.success : C.danger).withValues(alpha: .15),
+              color: c.withValues(alpha: .15),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(b.launcherAlive ? '● launcher online' : '○ launcher offline',
-                style: TextStyle(
-                  color: b.launcherAlive ? C.success : C.danger,
-                  fontSize: 10, fontWeight: FontWeight.w700)),
+            child: Text(st.state.toUpperCase(),
+                style: TextStyle(color: c, fontSize: 9,
+                    fontWeight: FontWeight.w900, letterSpacing: .8)),
           ),
         ]),
-        const SizedBox(height: 12),
-        if (b.bots.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('No bots registered',
-                style: TextStyle(color: C.muted, fontSize: 12)),
-          )
-        else
-          ...b.bots.map((bot) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(children: [
-              Text(stateIcon(bot.state),
-                  style: TextStyle(color: stateColor(bot.state), fontSize: 14)),
-              const SizedBox(width: 10),
-              Expanded(child: Text(bot.file,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-              Text('${bot.cpu?.toStringAsFixed(1) ?? '—'}%',
-                  style: const TextStyle(color: C.muted, fontSize: 11)),
-              const SizedBox(width: 12),
-              Text(fSize(bot.rss),
-                  style: const TextStyle(color: C.muted, fontSize: 11)),
-            ]),
-          )),
+        const SizedBox(height: 10),
+        Row(children: [
+          Icon(st.app.exists ? Icons.check_circle : Icons.cancel,
+              color: st.app.exists ? C.success : C.danger, size: 14),
+          const SizedBox(width: 6),
+          Text('app.py ${st.app.exists ? "موجود" : "غير موجود"}',
+              style: TextStyle(color: st.app.exists ? C.success : C.danger,
+                  fontSize: 12, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          Text(fSize(st.app.size),
+              style: const TextStyle(color: C.muted, fontSize: 11,
+                  fontFamily: 'monospace')),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          const Icon(Icons.timer_outlined, size: 12, color: C.muted),
+          const SizedBox(width: 4),
+          Text(fTime(st.uptimeSeconds),
+              style: const TextStyle(color: C.muted, fontSize: 11)),
+        ]),
       ]),
     );
   }

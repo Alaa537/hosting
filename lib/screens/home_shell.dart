@@ -6,7 +6,7 @@ import '../widgets/banner_widget.dart';
 import 'dashboard_screen.dart';
 import 'server_screen.dart';
 import 'files_screen.dart';
-import 'bots_screen.dart';
+import 'app_screen.dart';
 import 'more_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -18,8 +18,11 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _i = 0;
   static const _tabs = [
-    DashboardScreen(), ServerScreen(), FilesScreen(),
-    BotsScreen(), MoreScreen(),
+    DashboardScreen(),
+    ServerScreen(),
+    FilesScreen(),
+    AppScreen(),      // ← كان BotsScreen
+    MoreScreen(),
   ];
 
   @override
@@ -47,16 +50,21 @@ class _HomeShellState extends State<HomeShell> {
           indicatorColor: C.primary.withValues(alpha: .15),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.dashboard_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dashboard, color: C.primary), label: 'Dash'),
-            NavigationDestination(icon: Icon(Icons.dns_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dns, color: C.primary), label: 'Server'),
-            NavigationDestination(icon: Icon(Icons.folder_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.folder, color: C.primary), label: 'Files'),
-            NavigationDestination(icon: Icon(Icons.smart_toy_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.smart_toy, color: C.primary), label: 'Bots'),
-            NavigationDestination(icon: Icon(Icons.menu, color: C.muted),
-                selectedIcon: Icon(Icons.menu, color: C.primary), label: 'More'),
+            NavigationDestination(
+                icon: Icon(Icons.dashboard_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.dashboard, color: C.primary), label: 'لوحة'),
+            NavigationDestination(
+                icon: Icon(Icons.dns_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.dns, color: C.primary), label: 'سيرفر'),
+            NavigationDestination(
+                icon: Icon(Icons.folder_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.folder, color: C.primary), label: 'ملفات'),
+            NavigationDestination(
+                icon: Icon(Icons.rocket_launch_outlined, color: C.muted),
+                selectedIcon: Icon(Icons.rocket_launch, color: C.primary), label: 'تطبيقي'),
+            NavigationDestination(
+                icon: Icon(Icons.menu, color: C.muted),
+                selectedIcon: Icon(Icons.menu, color: C.primary), label: 'المزيد'),
           ],
         ),
       ),

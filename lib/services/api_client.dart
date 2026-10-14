@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../models/bootstrap.dart';
+import '../models/app_models.dart';
 
 class HostingException implements Exception {
   final int status;
@@ -27,7 +28,6 @@ class TokenExpiredException extends AuthException {
   TokenExpiredException(super.status, super.detail, super.url);
 }
 
-/// Callback fired whenever tokens change (initial login, refresh, logout).
 typedef TokenCallback = void Function(String? access, String? refresh);
 
 class ApiClient {
@@ -39,8 +39,6 @@ class ApiClient {
   DateTime? _expiresAt;
   final http.Client _http = http.Client();
   final TokenCallback? onTokenUpdate;
-
-  /// Serializes refresh calls.
   Future<bool>? _refreshing;
 
   ApiClient(this.baseUrl, {this.onTokenUpdate});
@@ -48,7 +46,6 @@ class ApiClient {
   String? get token => _token;
   String? get refreshToken => _refreshToken;
   String? get deviceId => _deviceId;
-
   set deviceId(String? id) => _deviceId = id;
   set appVersion(String v) => _appVersion = v;
 
@@ -56,7 +53,6 @@ class ApiClient {
     _token = access;
     _refreshToken = refresh;
     if (expiresInSeconds != null && expiresInSeconds > 0) {
-      // Refresh 60s before actual expiry.
       final safeTtl = expiresInSeconds > 90 ? expiresInSeconds - 60 : expiresInSeconds;
       _expiresAt = DateTime.now().add(Duration(seconds: safeTtl));
     } else {
@@ -93,12 +89,10 @@ class ApiClient {
       dynamic detail;
       try { detail = jsonDecode(r.body); }
       catch (_) { detail = r.body.isNotEmpty ? r.body : r.reasonPhrase; }
-      final body = r.body;
       if (r.statusCode == 401 || r.statusCode == 403) {
-        if (body.contains('ACCESS_TOKEN_EXPIRED') ||
-            body.contains('TOKEN_EXPIRED')) {
-          throw TokenExpiredException(r.statusCode, detail,
-              r.request?.url.toString() ?? '');
+        if (r.body.contains('ACCESS_TOKEN_EXPIRED') ||
+            r.body.contains('TOKEN_EXPIRED')) {
+          throw TokenExpiredException(r.statusCode, detail, r.request?.url.toString() ?? '');
         }
         throw AuthException(r.statusCode, detail, r.request?.url.toString() ?? '');
       }
@@ -112,98 +106,73 @@ class ApiClient {
     return r.body;
   }
 
-  /// Attempts a refresh. Returns true if the new tokens were applied.
   Future<bool> refresh() async {
     if (_refreshing != null) return _refreshing!;
     final completer = Completer<bool>();
     _refreshing = completer.future;
     try {
       final rt = _refreshToken;
-      if (rt == null || rt.isEmpty) {
-        completer.complete(false);
-        return false;
-      }
+      if (rt == null || rt.isEmpty) { completer.complete(false); return false; }
       final r = await _http.post(_u('/auth/refresh'),
           headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
           body: jsonEncode({'refresh_token': rt}));
       if (r.statusCode >= 400) {
-        _token = null;
-        _refreshToken = null;
-        _expiresAt = null;
+        _token = null; _refreshToken = null; _expiresAt = null;
         onTokenUpdate?.call(null, null);
-        completer.complete(false);
-        return false;
+        completer.complete(false); return false;
       }
       final data = jsonDecode(r.body) as Map<String, dynamic>;
-      setTokens(
-        access: data['token'] as String?,
-        refresh: data['refresh_token'] as String?,
-        expiresInSeconds: data['expires_in'] as int?,
-      );
-      completer.complete(true);
-      return true;
+      setTokens(access: data['token'], refresh: data['refresh_token'],
+          expiresInSeconds: data['expires_in']);
+      completer.complete(true); return true;
     } catch (_) {
-      completer.complete(false);
-      return false;
-    } finally {
-      _refreshing = null;
-    }
+      completer.complete(false); return false;
+    } finally { _refreshing = null; }
   }
 
   Future<dynamic> _send(String method, String path,
       {Object? body, Map<String, dynamic>? q, bool retry = true}) async {
-    if (retry && _needsRefresh) {
-      await refresh();
-    }
+    if (retry && _needsRefresh) await refresh();
     try {
       http.Response r;
       switch (method) {
         case 'GET':
-          r = await _http.get(_u(path, q), headers: _headers);
-          break;
+          r = await _http.get(_u(path, q), headers: _headers); break;
         case 'POST':
           r = await _http.post(_u(path, q),
               headers: {..._headers, 'Content-Type': 'application/json'},
-              body: body == null ? null : jsonEncode(body));
-          break;
+              body: body == null ? null : jsonEncode(body)); break;
         case 'PUT':
           r = await _http.put(_u(path, q),
               headers: {..._headers, 'Content-Type': 'application/json'},
-              body: body == null ? null : jsonEncode(body));
-          break;
+              body: body == null ? null : jsonEncode(body)); break;
         case 'DELETE':
           r = await _http.delete(_u(path, q),
-              headers: body == null
-                  ? _headers
+              headers: body == null ? _headers
                   : {..._headers, 'Content-Type': 'application/json'},
-              body: body == null ? null : jsonEncode(body));
-          break;
-        default:
-          throw ArgumentError('Unsupported method $method');
+              body: body == null ? null : jsonEncode(body)); break;
+        default: throw ArgumentError('method');
       }
-      // Auto refresh on access-token-expired.
       if (r.statusCode == 401 && retry &&
           (r.body.contains('ACCESS_TOKEN_EXPIRED') ||
            r.body.contains('TOKEN_EXPIRED'))) {
-        final ok = await refresh();
-        if (ok) return _send(method, path, body: body, q: q, retry: false);
+        if (await refresh()) {
+          return _send(method, path, body: body, q: q, retry: false);
+        }
       }
       return _decode(r);
     } on TokenExpiredException {
-      if (retry) {
-        final ok = await refresh();
-        if (ok) return _send(method, path, body: body, q: q, retry: false);
+      if (retry && await refresh()) {
+        return _send(method, path, body: body, q: q, retry: false);
       }
       rethrow;
     }
   }
 
-  Future<dynamic> _get(String p, {Map<String, dynamic>? q}) =>
-      _send('GET', p, q: q);
+  Future<dynamic> _get(String p, {Map<String, dynamic>? q}) => _send('GET', p, q: q);
   Future<dynamic> _post(String p, {Object? body, Map<String, dynamic>? q}) =>
       _send('POST', p, body: body, q: q);
-  Future<dynamic> _put(String p, {Object? body}) =>
-      _send('PUT', p, body: body);
+  Future<dynamic> _put(String p, {Object? body}) => _send('PUT', p, body: body);
   Future<dynamic> _del(String p, {Map<String, dynamic>? q, Object? body}) =>
       _send('DELETE', p, q: q, body: body);
 
@@ -221,11 +190,8 @@ class ApiClient {
     final r = await _send('POST', '/auth/login', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);
     if (m['token'] != null) {
-      setTokens(
-        access: m['token'] as String?,
-        refresh: m['refresh_token'] as String?,
-        expiresInSeconds: m['expires_in'] as int?,
-      );
+      setTokens(access: m['token'], refresh: m['refresh_token'],
+          expiresInSeconds: m['expires_in']);
     }
     return m;
   }
@@ -240,21 +206,15 @@ class ApiClient {
     final r = await _send('POST', '/auth/register', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);
     if (m['token'] != null) {
-      setTokens(
-        access: m['token'] as String?,
-        refresh: m['refresh_token'] as String?,
-        expiresInSeconds: m['expires_in'] as int?,
-      );
+      setTokens(access: m['token'], refresh: m['refresh_token'],
+          expiresInSeconds: m['expires_in']);
     }
     return m;
   }
 
   Future<void> logout() async {
-    try {
-      await _post('/auth/logout', body: {'refresh_token': _refreshToken});
-    } finally {
-      setTokens();
-    }
+    try { await _post('/auth/logout', body: {'refresh_token': _refreshToken}); }
+    finally { setTokens(); }
   }
 
   Future<void> logoutAll() async {
@@ -317,44 +277,40 @@ class ApiClient {
   Future<void> alertsRead([List<int>? ids]) =>
       _post('/me/alerts/read', body: {'ids': ids});
 
-  // ====== PUSH ======
-  Future<void> registerPushToken(String token, {String platform = 'android'}) =>
-      _post('/devices/register-token', body: {
-        'token': token, 'platform': platform, 'device_id': _deviceId,
-      });
+  // ====== APP (single-app mode) ======
+  Future<AppStatus> appStatus() async =>
+      AppStatus.fromJson(Map<String, dynamic>.from(await _get('/app')));
 
-  Future<void> deletePushToken(String token) =>
-      _del('/devices/register-token',
-          body: {'token': token, 'platform': 'android'});
-
-  // ====== ANNOUNCEMENTS / NOTIFICATIONS ======
-  Future<List<Announcement>> announcements() async {
-    final l = await _get('/announcements') as List;
-    return l.map((e) => Announcement.fromJson(e)).toList();
+  Future<String> appRead() async {
+    final r = await _get('/app/file');
+    if (r is Map) return r['content'] as String? ?? '';
+    return r.toString();
   }
 
-  Future<List<NotificationItem>> notifications({bool unread = false, int limit = 50}) async {
-    final l = await _get('/notifications', q: {'unread': unread, 'limit': limit}) as List;
-    return l.map((e) => NotificationItem.fromJson(e)).toList();
+  Future<void> appWrite(String content) =>
+      _post('/app/file', body: {'content': content});
+
+  Future<Map<String, dynamic>> appUpload(File file, {File? requirements}) async {
+    final req = http.MultipartRequest('POST', _u('/app/upload'));
+    req.headers.addAll(_headers);
+    req.files.add(await http.MultipartFile.fromPath(
+        'file', file.path, filename: file.uri.pathSegments.last));
+    if (requirements != null && await requirements.exists()) {
+      req.files.add(await http.MultipartFile.fromPath(
+          'requirements', requirements.path,
+          filename: requirements.uri.pathSegments.last));
+    }
+    final streamed = await req.send();
+    final r = await http.Response.fromStream(streamed);
+    return Map<String, dynamic>.from(_decode(r) ?? {});
   }
 
-  Future<void> notificationsRead([List<int>? ids]) =>
-      _post('/notifications/read', body: {'ids': ids});
-
-  Future<void> notificationsClear() => _del('/notifications');
-
-  // ====== SERVER ======
-  Future<ServerResources> serverResources() async =>
-      ServerResources.fromJson(Map<String, dynamic>.from(await _get('/server/resources')));
-  Future<void> power(String s) => _post('/server/power', body: {'signal': s});
-  Future<void> setAutoRestart(bool e) => _put('/server/auto-restart', body: {'enabled': e});
-  Future<void> sendCommand(String c) => _post('/server/command', body: {'command': c});
-  Future<void> reinstall() => _post('/server/reinstall', body: {'confirm': 'REINSTALL'});
-
-  Future<Map<String, dynamic>> startup() async =>
-      Map<String, dynamic>.from(await _get('/startup'));
-  Future<void> setStartupVar(String k, String v) =>
-      _put('/startup/variable', body: {'key': k, 'value': v});
+  Future<void> appStart() => _post('/app/start');
+  Future<void> appStop() => _post('/app/stop');
+  Future<void> appRestart() => _post('/app/restart');
+  Future<void> appKill() => _post('/app/kill');
+  Future<void> appCommand(String cmd) =>
+      _post('/app/command', body: {'command': cmd});
 
   // ====== FILES ======
   Future<List<FileItem>> listFiles([String dir = '/']) async {
@@ -412,57 +368,6 @@ class ApiClient {
     return Map<String, dynamic>.from(_decode(r) ?? {});
   }
 
-  // ====== BOTS ======
-  Future<BotList> botsList() async =>
-      BotList.fromJson(Map<String, dynamic>.from(await _get('/bots')));
-
-  Future<void> botsDeploy() => _post('/bots/deploy');
-
-  Future<Map<String, dynamic>> botsAdd(File file,
-      {String name = '', File? requirements, Map<String, String>? env}) async {
-    final req = http.MultipartRequest('POST', _u('/bots', {
-      'name': name,
-      if (env != null && env.isNotEmpty) 'env': jsonEncode(env),
-    }));
-    req.headers.addAll(_headers);
-    req.files.add(await http.MultipartFile.fromPath(
-        'file', file.path, filename: file.uri.pathSegments.last));
-    if (requirements != null && await requirements.exists()) {
-      req.files.add(await http.MultipartFile.fromPath(
-          'requirements', requirements.path,
-          filename: requirements.uri.pathSegments.last));
-    }
-    final streamed = await req.send();
-    final r = await http.Response.fromStream(streamed);
-    return Map<String, dynamic>.from(_decode(r) ?? {});
-  }
-
-  Future<BotInfo> botStatus(String f) async =>
-      BotInfo.fromJson(Map<String, dynamic>.from(await _get('/bots/$f/status')));
-
-  Future<void> botStart(String f) => _post('/bots/$f/start');
-  Future<void> botStop(String f) => _post('/bots/$f/stop');
-  Future<void> botRestart(String f) => _post('/bots/$f/restart');
-
-  Future<Map<String, dynamic>> botLogs(String f, {int lines = 200}) async =>
-      Map<String, dynamic>.from(await _get('/bots/$f/logs', q: {'lines': lines}));
-
-  Future<void> botLogsClear(String f) => _del('/bots/$f/logs');
-
-  Future<Map<String, dynamic>> botCrashes(String f) async =>
-      Map<String, dynamic>.from(await _get('/bots/$f/crashes'));
-
-  Future<void> botSetPolicy(String f, String mode, int delay, int max) =>
-      _put('/bots/$f/policy', body: {'mode': mode, 'delay': delay, 'max_fast_crashes': max});
-
-  Future<void> botSetEnv(String f, String k, String v) =>
-      _put('/bots/$f/env', body: {'key': k, 'value': v});
-
-  Future<void> botDeleteEnv(String f, String k) => _del('/bots/$f/env/$k');
-
-  Future<void> botRemove(String f, {bool deleteFile = false}) =>
-      _del('/bots/$f', q: {'delete_file': deleteFile});
-
   // ====== BACKUPS ======
   Future<Map<String, dynamic>> backups() async =>
       Map<String, dynamic>.from(await _get('/backups'));
@@ -488,6 +393,31 @@ class ApiClient {
       _put('/backups/policy', body: {
         'enabled': en, 'interval_hours': hours, 'keep': keep});
 
+  Future<Map<String, dynamic>> restoreStatus() async =>
+      Map<String, dynamic>.from(await _get('/backups/restore-status'));
+
+  // ====== NOTIFICATIONS ======
+  Future<List<Announcement>> announcements() async {
+    final l = await _get('/announcements') as List;
+    return l.map((e) => Announcement.fromJson(e)).toList();
+  }
+
+  Future<List<NotificationItem>> notifications({bool unread = false, int limit = 50}) async {
+    final l = await _get('/notifications', q: {'unread': unread, 'limit': limit}) as List;
+    return l.map((e) => NotificationItem.fromJson(e)).toList();
+  }
+
+  Future<void> notificationsRead([List<int>? ids]) =>
+      _post('/notifications/read', body: {'ids': ids});
+  Future<void> notificationsClear() => _del('/notifications');
+
+  // ====== SERVER ======
+  Future<ServerResources> serverResources() async =>
+      ServerResources.fromJson(Map<String, dynamic>.from(await _get('/server/resources')));
+  Future<void> power(String s) => _post('/server/power', body: {'signal': s});
+  Future<void> setAutoRestart(bool e) =>
+      _put('/server/auto-restart', body: {'enabled': e});
+
   // ====== ADMIN ======
   Future<AdminStats> adminStats() async =>
       AdminStats.fromJson(Map<String, dynamic>.from(await _get('/admin/stats')));
@@ -497,11 +427,21 @@ class ApiClient {
     return ((r as Map)['requests'] as List).cast<Map<String, dynamic>>();
   }
 
-  Future<void> adminApprove(int uid, {int? days}) =>
-      _post('/admin/requests/$uid/approve', body: {if (days != null) 'days': days});
+  Future<void> adminApprove(int uid, {int? days, int? maxBots}) =>
+      _post('/admin/requests/$uid/approve', body: {
+        if (days != null) 'days': days,
+        if (maxBots != null) 'max_bots': maxBots,
+      });
 
   Future<void> adminReject(int uid, String reason) =>
       _post('/admin/requests/$uid/reject', body: {'reason': reason});
+
+  Future<void> adminBulk(List<int> uids, String action,
+      {String reason = '', int days = 30, String text = ''}) =>
+      _post('/admin/bulk', body: {
+        'user_ids': uids, 'action': action,
+        'reason': reason, 'days': days, 'text': text,
+      });
 
   Future<List<AdminUser>> adminUsers({String search = ''}) async {
     final l = await _get('/admin/users', q: {'search': search}) as List;
@@ -513,7 +453,6 @@ class ApiClient {
 
   Future<void> adminBan(int uid, String reason) =>
       _post('/admin/users/$uid/ban', body: {'reason': reason, 'kill_server': true});
-
   Future<void> adminUnban(int uid) => _post('/admin/users/$uid/unban');
   Future<void> adminSetPassword(int uid, String pw) =>
       _post('/admin/users/$uid/password', body: {'new_password': pw});
@@ -539,7 +478,7 @@ class ApiClient {
   Future<void> adminWipe(int uid) =>
       _post('/admin/users/$uid/wipe', body: {'confirm': 'WIPE'});
 
-  Future<Map<String, dynamic>> adminSessions({bool activeOnly = true, int limit = 200}) async =>
+  Future<Map<String, dynamic>> adminSessions({bool activeOnly = true, int limit = 300}) async =>
       Map<String, dynamic>.from(await _get('/admin/sessions',
           q: {'active_only': activeOnly, 'limit': limit}));
 
@@ -547,13 +486,11 @@ class ApiClient {
       _post('/admin/sessions/revoke', body: {'session_id': id});
 
   Future<Map<String, dynamic>> adminDevices({String search = ''}) async =>
-      Map<String, dynamic>.from(await _get('/admin/device-lock',
-          q: {'search': search}));
+      Map<String, dynamic>.from(await _get('/admin/device-lock', q: {'search': search}));
 
   Future<void> adminDeleteDevice(String deviceId) =>
       _del('/admin/device-lock/$deviceId');
 
-  // ---- Admin content ----
   Future<Map<String, dynamic>> adminCreateModal(Map<String, dynamic> fields) async =>
       Map<String, dynamic>.from(await _post('/admin/modals', body: fields));
   Future<List<Map<String, dynamic>>> adminModals({bool activeOnly = true}) async {
@@ -580,9 +517,6 @@ class ApiClient {
 
   Future<void> adminKillSwitch(bool enabled, {String reason = ''}) =>
       _post('/admin/kill-switch', body: {'enabled': enabled, 'reason': reason});
-
-  Future<void> adminRedeployAll({bool restart = false}) =>
-      _post('/admin/redeploy-all', body: {'restart': restart});
 
   Future<Map<String, dynamic>> adminSettings() async =>
       Map<String, dynamic>.from(await _get('/admin/settings'));
@@ -612,9 +546,9 @@ class ApiClient {
   }
 
   // ====== WEBSOCKET ======
-  Future<WebSocket> connectEvents({String? bot}) async {
+  Future<WebSocket> connectEvents() async {
     final ws = baseUrl.replaceFirst('http', 'ws');
-    final url = '$ws/ws/events?token=$_token${bot != null ? '&bot=$bot' : ''}';
+    final url = '$ws/ws/events?token=$_token';
     return WebSocket.connect(url);
   }
 

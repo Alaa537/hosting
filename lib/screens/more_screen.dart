@@ -8,6 +8,8 @@ import 'backups_screen.dart';
 import 'notifications_screen.dart';
 import 'sessions_screen.dart';
 import 'user_info_screen.dart';
+import 'app_screen.dart';
+import 'live_console_screen.dart';
 import 'admin_screen.dart';
 import 'settings_screen.dart';
 
@@ -89,6 +91,12 @@ class MoreScreen extends StatelessWidget {
             _tile(context, Icons.devices_other, 'جلساتي',
                 'الأجهزة المسجلة',
                 () => _push(context, const SessionsScreen())),
+            _tile(context, Icons.rocket_launch_outlined, 'تطبيقي',
+                'app.py · التحكم',
+                () => _push(context, const AppScreen())),
+            _tile(context, Icons.terminal, 'وحدة التحكم',
+                'السجل المباشر',
+                () => _push(context, const LiveConsoleScreen())),
             _tile(context, Icons.backup_outlined, 'النسخ الاحتياطي',
                 'إنشاء / استرجاع',
                 () => _push(context, const BackupsScreen())),

@@ -47,13 +47,12 @@ jobs:
           s = p.read_text()
           s = re.sub(r'android:label="[^"]*"', 'android:label="HOST PANEL"', s, count=1)
           p.write_text(s)
-          print('OK label')
           PY
 
-      - name: Generate app icons from PNG
+      - name: Generate app icons
         run: dart run flutter_launcher_icons
 
-      - name: Inject MainActivity.kt (100% native security)
+      - name: Inject MainActivity.kt (native only for local data)
         run: |
           MAIN_KT=android/app/src/main/kotlin/com/alaa/hosting/MainActivity.kt
           mkdir -p "$(dirname "$MAIN_KT")"
@@ -69,289 +68,118 @@ jobs:
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
-          import org.json.JSONObject
-          import java.io.BufferedReader
           import java.io.File
-          import java.io.FileReader
           import java.net.InetSocketAddress
           import java.net.Socket
-          import java.net.URL
           import java.security.MessageDigest
-          import javax.net.ssl.HttpsURLConnection
 
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
-
-              // Cache for signature check (avoid hammering GitHub every 5s)
-              private var cachedSigOk: Boolean = false
-              private var cachedSigAt: Long = 0L
-              private val SIG_CACHE_MS = 30_000L   // 30s cache
 
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CH)
                       .setMethodCallHandler { call, result ->
                           when (call.method) {
-                              "fullSecurityCheck" -> result.success(fullSecurityCheck())
+                              "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
+                              "isVpnActive"     -> result.success(isVpnActive())
+                              "isRooted"        -> result.success(isRooted())
+                              "isFridaRunning"  -> result.success(isFridaRunning())
+                              "hasXposed"       -> result.success(hasXposed())
+                              "isDebuggable"    -> result.success(isDebuggable())
+                              "getHttpProxy"    -> result.success(getHttpProxy())
+                              "getRunningProcs" -> result.success(getRunningProcs())
                               else -> result.notImplemented()
                           }
                       }
               }
 
-              // =========================================
-              //  MASTER CHECK — returns {ok:Boolean, reason:String, message:String}
-              //  All signature verification + VPN + root + frida + xposed + ssl
-              //  happen INSIDE this method. Dart sees only the outcome.
-              // =========================================
-              private fun fullSecurityCheck(): Map<String, Any> {
-                  return try {
-                      if (isDebuggable())        return fail("debugger")
-                      if (isRooted())            return fail("rooted")
-                      if (isFridaRunning())      return fail("frida")
-                      if (hasXposed())           return fail("xposed")
-                      if (isVpnActive())         return fail("vpn")
-                      if (hasMitm())             return fail("mitm")
-                      if (!checkSsl())           return fail("ssl")
+              private fun isVpnActive(): Boolean = try {
+                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      val net = cm.activeNetwork ?: return false
+                      val caps = cm.getNetworkCapabilities(net) ?: return false
+                      caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                  } else false
+              } catch (_: Exception) { false }
 
-                      val sig = checkSignatureRemote()
-                      if (!sig.first) return fail("tampered", sig.second)
+              private fun getHttpProxy(): String? = try {
+                  val h = System.getProperty("http.proxyHost")
+                  val p = System.getProperty("http.proxyPort")
+                  if (!h.isNullOrEmpty()) "$h:$p" else null
+              } catch (_: Exception) { null }
 
-                      mapOf("ok" to true, "reason" to "", "message" to "")
-                  } catch (e: Exception) {
-                      fail("error", e.message ?: "unknown")
-                  }
-              }
-
-              private fun fail(reason: String, msg: String? = null): Map<String, Any> =
-                  mapOf("ok" to false, "reason" to reason, "message" to (msg ?: ""))
-
-              // ================= VPN =================
-              private fun isVpnActive(): Boolean {
-                  return try {
-                      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                          val active = cm.activeNetwork ?: return false
-                          val caps = cm.getNetworkCapabilities(active) ?: return false
-                          caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                      } else false
-                  } catch (_: Exception) { false }
-              }
-
-              // ================= MITM =================
-              private fun hasMitm(): Boolean {
-                  // Proxy
-                  try {
-                      val h = System.getProperty("http.proxyHost")
-                      val p = System.getProperty("http.proxyPort")
-                      if (!h.isNullOrEmpty()) return true
-                      if (!p.isNullOrEmpty()) return true
-                  } catch (_: Exception) {}
-
-                  // Known tools in processes
-                  val procs = getRunningProcs().lowercase()
-                  for (n in listOf("canary","charles","fiddler","mitmproxy",
-                                   "burpsuite","httpcanary","httptoolkit",
-                                   "reqable","packetcapture")) {
-                      if (procs.contains(n)) return true
-                  }
-                  return false
-              }
-
-              private fun getRunningProcs(): String {
-                  return try {
-                      val sb = StringBuilder()
-                      File("/proc").listFiles()?.forEach { f ->
-                          if (f.name.all { it.isDigit() }) {
-                              val cmd = File(f, "cmdline")
-                              if (cmd.exists()) try {
-                                  sb.append(cmd.readText()).append('\n')
-                              } catch (_: Exception) {}
-                          }
-                      }
-                      sb.toString()
-                  } catch (_: Exception) { "" }
-              }
-
-              // ================= SSL STRICT =================
-              private fun checkSsl(): Boolean {
-                  return try {
-                      val url = URL("https://raw.githubusercontent.com/Alaa537/hosting-sec/main/signature.json")
-                      val conn = url.openConnection() as HttpsURLConnection
-                      conn.connectTimeout = 5000
-                      conn.readTimeout = 5000
-                      conn.requestMethod = "HEAD"
-                      conn.connect()
-                      val code = conn.responseCode
-                      conn.disconnect()
-                      code in 200..399 || code == 404
-                  } catch (e: javax.net.ssl.SSLHandshakeException) {
-                      false
-                  } catch (e: java.security.cert.CertificateException) {
-                      false
-                  } catch (_: Exception) {
-                      // Network glitch — not an SSL failure
-                      true
-                  }
-              }
-
-              // ================= SIGNATURE (100% NATIVE) =================
-              private fun checkSignatureRemote(): Pair<Boolean, String?> {
-                  // 30s cache — avoids hammering GitHub
-                  val now = System.currentTimeMillis()
-                  if (cachedSigOk && (now - cachedSigAt) < SIG_CACHE_MS) {
-                      return Pair(true, null)
-                  }
-
-                  val localSha = getApkSignatureSha256()
-                      ?.replace(":", "")?.lowercase()
-                      ?: return Pair(false, "no_local")
-
-                  val sources = listOf(
-                      "https://raw.githubusercontent.com/Alaa537/hosting-sec/main/signature.json",
-                      "https://cdn.jsdelivr.net/gh/Alaa537/hosting-sec@main/signature.json",
-                      "https://cdn.statically.io/gh/Alaa537/hosting-sec/main/signature.json",
-                      "https://alaa537.github.io/hosting-sec/signature.json"
-                  )
-
-                  for (base in sources) {
-                      try {
-                          val url = URL("$base?t=$now")
-                          val conn = url.openConnection() as HttpsURLConnection
-                          conn.connectTimeout = 5000
-                          conn.readTimeout = 5000
-                          conn.requestMethod = "GET"
-                          conn.setRequestProperty("User-Agent", "hosting-app/1.0")
-                          conn.setRequestProperty("Accept", "application/json")
-
-                          if (conn.responseCode == 200) {
-                              val body = conn.inputStream.bufferedReader().use { it.readText() }
-                              val json = JSONObject(body)
-                              val sigs = json.optJSONObject("signatures")
-                              val remote = sigs?.optString("sha256", "")
-                                  ?.replace(":", "")?.lowercase() ?: ""
-                              if (remote.isNotEmpty()) {
-                                  val matches = (remote == localSha)
-                                  if (matches) {
-                                      cachedSigOk = true
-                                      cachedSigAt = now
-                                  } else {
-                                      cachedSigOk = false
-                                  }
-                                  return Pair(matches, null)
-                              }
-                          }
-                      } catch (_: Exception) {
-                          continue
+              private fun getRunningProcs(): String = try {
+                  val sb = StringBuilder()
+                  File("/proc").listFiles()?.forEach { f ->
+                      if (f.name.all { it.isDigit() }) {
+                          val cmd = File(f, "cmdline")
+                          if (cmd.exists()) try { sb.append(cmd.readText()).append('\n') } catch (_: Exception) {}
                       }
                   }
-                  return Pair(false, "no_remote")
-              }
+                  sb.toString()
+              } catch (_: Exception) { "" }
 
-              // ================= APK SIGNATURE SHA-256 =================
-              private fun getApkSignatureSha256(): String? {
-                  return try {
-                      val pm = packageManager
-                      val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                      } else {
-                          @Suppress("DEPRECATION")
-                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-                      }
-                      val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                          info.signingInfo?.apkContentsSigners
-                      } else {
-                          @Suppress("DEPRECATION")
-                          info.signatures
-                      }
-                      val sig = sigs?.firstOrNull() ?: return null
-                      MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
-                          .joinToString(":") { "%02X".format(it) }
-                  } catch (_: Exception) { null }
-              }
+              private fun getApkSignatureSha256(): String? = try {
+                  val pm = packageManager
+                  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                  } else {
+                      @Suppress("DEPRECATION")
+                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+                  }
+                  val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      info.signingInfo?.apkContentsSigners
+                  } else {
+                      @Suppress("DEPRECATION")
+                      info.signatures
+                  }
+                  val sig = sigs?.firstOrNull() ?: return null
+                  MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+                      .joinToString(":") { "%02X".format(it) }
+              } catch (_: Exception) { null }
 
-              // ================= ROOT =================
-              private fun isRooted(): Boolean {
-                  return checkRootBinaries() || checkRootPackages() ||
-                         checkWritableSystem() || checkMagisk()
-              }
-
-              private fun checkRootBinaries(): Boolean {
+              private fun isRooted(): Boolean = try {
                   val paths = listOf(
                       "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su",
                       "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su",
-                      "/system/sd/xbin/su", "/system/bin/failsafe/su",
-                      "/data/local/su", "/su/bin/su",
-                      "/system/xbin/daemonsu", "/system/xbin/busybox"
+                      "/system/sd/xbin/su", "/data/local/su", "/su/bin/su"
                   )
-                  return paths.any { File(it).exists() }
-              }
+                  val byBin = paths.any { File(it).exists() }
+                  val byPkg = try {
+                      val pkgs = listOf("com.topjohnwu.magisk", "com.noshufou.android.su",
+                          "com.koushikdutta.superuser", "eu.chainfire.supersu")
+                      pkgs.any { try { packageManager.getPackageInfo(it, 0); true } catch (_: Exception) { false } }
+                  } catch (_: Exception) { false }
+                  byBin || byPkg || File("/sbin/.magisk").exists()
+              } catch (_: Exception) { false }
 
-              private fun checkRootPackages(): Boolean {
-                  val pkgs = listOf(
-                      "com.topjohnwu.magisk", "com.noshufou.android.su",
-                      "com.koushikdutta.superuser", "eu.chainfire.supersu",
-                      "com.kingroot.kinguser", "com.kingo.root"
-                  )
-                  val pm = packageManager
-                  return pkgs.any {
-                      try { pm.getPackageInfo(it, 0); true } catch (_: Exception) { false }
-                  }
-              }
-
-              private fun checkWritableSystem(): Boolean =
-                  listOf("/system", "/system/bin", "/system/xbin")
-                      .any { try { File(it).canWrite() } catch (_: Exception) { false } }
-
-              private fun checkMagisk(): Boolean {
-                  return File("/sbin/.magisk").exists() ||
-                         File("/init.magisk.rc").exists() ||
-                         File("/dev/.magisk.unblock").exists()
-              }
-
-              // ================= FRIDA =================
-              private fun isFridaRunning(): Boolean {
-                  // Ports
+              private fun isFridaRunning(): Boolean = try {
+                  var found = false
                   for (port in listOf(27042, 27043)) {
-                      try {
-                          val s = Socket()
-                          s.connect(InetSocketAddress("127.0.0.1", port), 80)
-                          s.close()
-                          return true
-                      } catch (_: Exception) {}
+                      try { val s = Socket(); s.connect(InetSocketAddress("127.0.0.1", port), 80); s.close(); found = true } catch (_: Exception) {}
                   }
-                  // /proc/self/maps
-                  try {
+                  if (!found) {
                       val f = File("/proc/self/maps")
                       if (f.exists()) {
-                          val content = f.readText().lowercase()
-                          if (content.contains("frida") || content.contains("gadget")) return true
+                          val c = f.readText().lowercase()
+                          if (c.contains("frida") || c.contains("gadget")) found = true
                       }
-                  } catch (_: Exception) {}
-                  // Procs
-                  val procs = getRunningProcs().lowercase()
-                  if (procs.contains("frida") || procs.contains("linjector") ||
-                      procs.contains("gum-js-loop")) return true
-                  return false
-              }
-
-              // ================= XPOSED =================
-              private fun hasXposed(): Boolean {
-                  return try {
-                      javaClass.classLoader?.loadClass("de.robv.android.xposed.XposedBridge") != null
-                  } catch (_: Exception) {
-                      File("/system/framework/XposedBridge.jar").exists() ||
-                      File("/system/lib/libxposed_art.so").exists()
                   }
+                  found
+              } catch (_: Exception) { false }
+
+              private fun hasXposed(): Boolean = try {
+                  javaClass.classLoader?.loadClass("de.robv.android.xposed.XposedBridge") != null ||
+                  File("/system/framework/XposedBridge.jar").exists()
+              } catch (_: Exception) {
+                  try { File("/system/framework/XposedBridge.jar").exists() } catch (_: Exception) { false }
               }
 
-              // ================= DEBUGGER =================
-              private fun isDebuggable(): Boolean {
-                  return try {
-                      (applicationInfo.flags and
-                          android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 ||
-                      Debug.isDebuggerConnected() || Debug.waitingForDebugger()
-                  } catch (_: Exception) { false }
-              }
+              private fun isDebuggable(): Boolean = try {
+                  (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 ||
+                  Debug.isDebuggerConnected() || Debug.waitingForDebugger()
+              } catch (_: Exception) { false }
           }
           KOT
 
@@ -380,7 +208,6 @@ jobs:
           if 'requestLegacyExternalStorage' not in s:
               s = s.replace('<application', '<application android:requestLegacyExternalStorage="true"', 1)
           p.write_text(s)
-          print('OK manifest patched')
           PY
 
       - name: Build
@@ -388,15 +215,12 @@ jobs:
           TYPE="${{ github.event.inputs.build_type }}"
           OUT="${{ github.event.inputs.output_type }}"
           FLAGS="--obfuscate --split-debug-info=build/symbols"
-          if [ "$OUT" = "apk" ]; then
-            flutter build apk --$TYPE $FLAGS
-          elif [ "$OUT" = "apk-split" ]; then
-            flutter build apk --$TYPE $FLAGS --split-per-abi
-          elif [ "$OUT" = "appbundle" ]; then
-            flutter build appbundle --$TYPE $FLAGS
+          if [ "$OUT" = "apk" ]; then flutter build apk --$TYPE $FLAGS
+          elif [ "$OUT" = "apk-split" ]; then flutter build apk --$TYPE $FLAGS --split-per-abi
+          elif [ "$OUT" = "appbundle" ]; then flutter build appbundle --$TYPE $FLAGS
           fi
 
-      - name: Upload symbols (private)
+      - name: Upload symbols
         uses: actions/upload-artifact@v4
         with:
           name: debug-symbols-private

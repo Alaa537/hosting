@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/security_service.dart';
 import '../utils/constants.dart';
@@ -13,35 +14,50 @@ class SecurityBlockScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: C.bg,
       body: SafeArea(child: Center(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(24),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Container(
-            width: 120, height: 120,
+            width: 100, height: 100,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: d.$4.withValues(alpha: .12),
               border: Border.all(color: d.$4.withValues(alpha: .55), width: 2),
-              boxShadow: [BoxShadow(color: d.$4.withValues(alpha: .35),
-                  blurRadius: 40, spreadRadius: 6)],
             ),
-            child: Center(child: Text(d.$1, style: const TextStyle(fontSize: 54))),
+            child: Center(child: Text(d.$1, style: const TextStyle(fontSize: 46))),
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 20),
           Text(d.$2, textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 14),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: C.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: d.$4.withValues(alpha: .35)),
             ),
-            child: Text(d.$3, textAlign: TextAlign.center,
+            child: SelectableText(d.$3,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70,
-                    fontSize: 14, height: 1.7)),
+                    fontSize: 12.5, height: 1.6, fontFamily: 'monospace')),
           ),
-          const SizedBox(height: 22),
+          if (result.debug.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(
+                    text: const JsonEncoder.withIndent('  ').convert(result.debug)));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('تم نسخ التفاصيل'),
+                  duration: Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating));
+              },
+              icon: const Icon(Icons.copy, size: 16, color: C.muted),
+              label: const Text('نسخ التفاصيل',
+                  style: TextStyle(color: C.muted, fontSize: 11)),
+            ),
+          ],
+          const SizedBox(height: 16),
           TextButton.icon(
             onPressed: () async {
               try {
@@ -61,25 +77,23 @@ class SecurityBlockScreen extends StatelessWidget {
   (String, String, String, Color) _details() {
     switch (result.status) {
       case SecurityStatus.vpn:
-        return ('🚫', 'VPN مكتشف', 'أوقف الـ VPN ثم أعد فتح التطبيق.', C.danger);
+        return ('🚫', 'VPN مكتشف', result.message ?? 'أوقف VPN', C.danger);
       case SecurityStatus.mitm:
-        return ('🛡️', 'أداة مراقبة', 'أغلق HTTP Canary / Charles ثم أعد الفتح.', C.danger);
+        return ('🛡️', 'أداة مراقبة', result.message ?? 'أغلق Canary/Charles', C.danger);
       case SecurityStatus.tampered:
-        return ('⚠️', 'تطبيق معدّل', 'التوقيع غير مطابق. حمّل النسخة الأصلية.', C.danger);
+        return ('⚠️', 'تطبيق معدّل', result.message ?? 'التوقيع غير مطابق', C.danger);
       case SecurityStatus.ssl:
-        return ('🔒', 'شهادة غير موثوقة', 'قد تكون هناك محاولة اعتراض للاتصال.', C.danger);
+        return ('🔒', 'شهادة غير موثوقة', result.message ?? 'قد يكون هناك اعتراض', C.danger);
       case SecurityStatus.rooted:
-        return ('🔓', 'الجهاز متجذّر', 'لا يمكن استخدام التطبيق على جهاز Rooted.', C.danger);
+        return ('🔓', 'الجهاز متجذّر', 'لا يعمل على جهاز Rooted', C.danger);
       case SecurityStatus.frida:
-        return ('🎯', 'أداة تحليل مكتشفة', 'أغلق Frida وأعد فتح التطبيق.', C.danger);
-      case SecurityStatus.emulator:
-        return ('💻', 'محاكي مكتشف', 'التطبيق لا يعمل على المحاكيات.', C.danger);
+        return ('🎯', 'أداة تحليل', 'أغلق Frida', C.danger);
       case SecurityStatus.debugger:
-        return ('🐛', 'التطبيق تحت التصحيح', 'أغلق الـ Debugger وأعد الفتح.', C.danger);
+        return ('🐛', 'تحت التصحيح', 'أغلق الـ Debugger', C.danger);
       case SecurityStatus.xposed:
-        return ('🧩', 'Xposed مكتشف', 'أزل Xposed Framework.', C.danger);
+        return ('🧩', 'Xposed مكتشف', 'أزل Xposed', C.danger);
       case SecurityStatus.error:
-        return ('⚠️', 'خطأ', result.message ?? 'تعذّر التحقق.', C.warning);
+        return ('⚠️', 'خطأ', result.message ?? 'غير معروف', C.warning);
       case SecurityStatus.ok:
         return ('✅', 'OK', '', C.success);
     }

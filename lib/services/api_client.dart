@@ -418,6 +418,18 @@ class ApiClient {
   Future<void> setAutoRestart(bool e) =>
       _put('/server/auto-restart', body: {'enabled': e});
 
+  Future<Map<String, dynamic>> startup() async =>
+      Map<String, dynamic>.from(await _get('/startup'));
+
+  Future<void> setStartupVar(String k, String v) =>
+      _put('/startup/variable', body: {'key': k, 'value': v});
+
+  Future<void> reinstall() =>
+      _post('/server/reinstall', body: {'confirm': 'REINSTALL'});
+
+  Future<void> sendCommand(String c) =>
+      _post('/server/command', body: {'command': c});
+
   // ====== ADMIN ======
   Future<AdminStats> adminStats() async =>
       AdminStats.fromJson(Map<String, dynamic>.from(await _get('/admin/stats')));

@@ -6,6 +6,10 @@ import '../models/models.dart';
 import '../models/app_models.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/skeleton.dart';
+import '../widgets/app_toast.dart';
 import '../utils/error_utils.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -61,9 +65,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               _header(),
               const SizedBox(height: 16),
-              if (_loading) const Center(
-                child: Padding(padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(color: C.primary))),
+              if (_loading) const SkeletonList(count: 4),
               if (_err != null) _errCard(),
               if (_res != null) _resourcesCard(_res!),
               if (_app != null) ...[
@@ -119,13 +121,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   );
 
   Widget _resourcesCard(ServerResources r) {
-    return Container(
+    final stateC = stateColor(r.state);
+    return GlassCard(
+      accent: stateC,
+      glow: r.state == 'running',
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: C.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: C.border),
-      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(width: 10, height: 10,

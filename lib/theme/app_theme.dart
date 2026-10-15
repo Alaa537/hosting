@@ -21,16 +21,17 @@ class AppTheme {
       ),
       textTheme: text,
       appBarTheme: AppBarTheme(
-        backgroundColor: C.bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
+        scrolledUnderElevation: 0,
         titleTextStyle: GoogleFonts.cairo(
           fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white,
         ),
         iconTheme: const IconThemeData(color: C.primary),
       ),
       cardTheme: CardThemeData(
-        color: C.surface,
+        color: C.surface.withValues(alpha: .85),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
@@ -52,7 +53,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: C.primary, width: 1.5),
+          borderSide: const BorderSide(color: C.primary, width: 1.6),
         ),
         labelStyle: const TextStyle(color: C.muted),
         hintStyle: const TextStyle(color: C.muted),
@@ -88,12 +89,27 @@ class AppTheme {
             color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: C.surface,
-        indicatorColor: C.primary.withValues(alpha: .15),
+        backgroundColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        elevation: 0,
         labelTextStyle: MaterialStateProperty.all(
           GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w700),
         ),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: C.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      }),
     );
   }
 }

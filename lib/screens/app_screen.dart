@@ -9,6 +9,10 @@ import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/app_toast.dart';
 import 'live_console_screen.dart';
 import 'files_screen.dart';
 
@@ -229,13 +233,11 @@ class _AppScreenState extends State<AppScreen> {
   Widget _statusCard(AppStatus st) {
     final c = stateColor(st.state);
     final r = st.resources;
-    return Container(
+    final stateC = stateColor(st.state);
+    return GlassCard(
+      accent: stateC,
+      glow: st.state == 'running',
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: C.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: C.border),
-      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(width: 10, height: 10,

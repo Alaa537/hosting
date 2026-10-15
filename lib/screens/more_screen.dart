@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/glass_card.dart';
 import 'profile_screen.dart';
 import 'backups_screen.dart';
 import 'notifications_screen.dart';
@@ -150,21 +151,20 @@ class MoreScreen extends StatelessWidget {
 
   Widget _tile(BuildContext ctx, IconData ic, String title, String sub,
       VoidCallback onTap, {bool accent = false}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: C.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent
-            ? C.accent.withValues(alpha: .4) : C.border),
-      ),
-      child: ListTile(
-        leading: Icon(ic, color: accent ? C.accent : C.primary),
-        title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-        subtitle: Text(sub, style: const TextStyle(color: C.muted, fontSize: 11)),
-        trailing: const Icon(Icons.chevron_right, color: C.muted),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassCard(
+        accent: accent ? C.accent : C.primary,
+        padding: EdgeInsets.zero,
         onTap: onTap,
+        child: ListTile(
+          leading: Icon(ic, color: accent ? C.accent : C.primary),
+          title: Text(title,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          subtitle: Text(sub,
+              style: const TextStyle(color: C.muted, fontSize: 11)),
+          trailing: const Icon(Icons.chevron_right, color: C.muted),
+        ),
       ),
     );
   }

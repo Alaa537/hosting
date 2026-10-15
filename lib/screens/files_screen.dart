@@ -14,6 +14,10 @@ import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/code_viewer.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/skeleton.dart';
+import '../widgets/app_toast.dart';
 
 class FilesScreen extends StatefulWidget {
   const FilesScreen({super.key});
@@ -505,7 +509,7 @@ class _FilesScreenState extends State<FilesScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: C.primary));
+      return const SkeletonList(count: 6);
     }
     if (_err != null) {
       return Center(child: Padding(
@@ -524,23 +528,13 @@ class _FilesScreenState extends State<FilesScreen> {
       ));
     }
     if (_items.isEmpty) {
-      return Center(child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.folder_open, size: 64,
-              color: C.muted.withValues(alpha: .4)),
-          const SizedBox(height: 12),
-          const Text('المجلد فارغ',
-              style: TextStyle(color: C.muted, fontSize: 14)),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _upload,
-            icon: const Icon(Icons.upload, color: C.primary),
-            label: const Text('رفع ملف',
-                style: TextStyle(color: C.primary)),
-          ),
-        ],
-      ));
+      return BeautifulEmpty(
+        icon: Icons.folder_open,
+        title: 'المجلد فارغ',
+        subtitle: 'ارفع ملفاً للبدء',
+        actionLabel: 'رفع ملف',
+        onAction: _upload,
+      );
     }
     return RefreshIndicator(
       onRefresh: _load,

@@ -8,6 +8,9 @@ import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/skeleton.dart';
 
 class ServerScreen extends StatefulWidget {
   const ServerScreen({super.key});
@@ -100,7 +103,7 @@ class _ServerScreenState extends State<ServerScreen> {
         ],
       ),
       body: SafeArea(child: _loading
-        ? const Center(child: CircularProgressIndicator(color: C.primary))
+        ? const SkeletonList(count: 4)
         : RefreshIndicator(
             onRefresh: _load,
             color: C.primary,
@@ -234,14 +237,13 @@ class _ServerScreenState extends State<ServerScreen> {
     ]),
   );
 
-  Widget _statsCard(ServerResources r) => Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: C.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: C.border),
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _statsCard(ServerResources r) {
+    final stateC = stateColor(r.state);
+    return GlassCard(
+      accent: stateC,
+      glow: r.state == 'running',
+      padding: const EdgeInsets.all(18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(width: 10, height: 10,
           decoration: BoxDecoration(color: stateColor(r.state),
@@ -274,7 +276,8 @@ class _ServerScreenState extends State<ServerScreen> {
         _net('▲', fSize(r.netTx), C.accent),
       ]),
     ]),
-  );
+    );
+  }
 
   Widget _bar(String label, double? pct, int? used, int? limit) {
     final v = pct ?? 0;

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/banner_widget.dart';
+import '../widgets/pulse_icon.dart';
 import 'dashboard_screen.dart';
 import 'server_screen.dart';
 import 'files_screen.dart';
@@ -25,12 +26,22 @@ class _HomeShellState extends State<HomeShell> {
     MoreScreen(),
   ];
 
+  static const _labels = ['لوحة', 'سيرفر', 'ملفات', 'بوتي', 'المزيد'];
+  static const _icons = [
+    Icons.dashboard_rounded,
+    Icons.dns_rounded,
+    Icons.folder_rounded,
+    Icons.smart_toy_rounded,
+    Icons.grid_view_rounded,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final bs = context.watch<AuthProvider>().bootstrap_;
     final banners = bs?.banners ?? const [];
 
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: Column(children: [
@@ -38,12 +49,15 @@ class _HomeShellState extends State<HomeShell> {
             ...banners.map((b) => BannerStrip(banner: b)),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 280),
               transitionBuilder: (child, anim) => FadeTransition(
                 opacity: anim,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.98, end: 1).animate(
-                      CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, .04),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                      parent: anim, curve: Curves.easeOutCubic)),
                   child: child,
                 ),
               ),
@@ -54,45 +68,63 @@ class _HomeShellState extends State<HomeShell> {
         ]),
       ),
       bottomNavigationBar: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         decoration: BoxDecoration(
-          color: C.surface,
-          border: const Border(top: BorderSide(color: C.border)),
+          color: C.surface.withValues(alpha: .92),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: C.border),
           boxShadow: [
             BoxShadow(
+                color: Colors.black.withValues(alpha: .35),
+                blurRadius: 24,
+                offset: const Offset(0, 8)),
+            BoxShadow(
                 color: C.primary.withValues(alpha: .08),
-                blurRadius: 20,
-                spreadRadius: 1),
+                blurRadius: 32,
+                spreadRadius: 2),
           ],
         ),
-        child: NavigationBar(
-          selectedIndex: _i,
-          onDestinationSelected: (v) => setState(() => _i = v),
-          backgroundColor: Colors.transparent,
-          indicatorColor: C.primary.withValues(alpha: .15),
-          elevation: 0,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.dashboard_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dashboard, color: C.primary),
-                label: 'لوحة'),
-            NavigationDestination(
-                icon: Icon(Icons.dns_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dns, color: C.primary),
-                label: 'سيرفر'),
-            NavigationDestination(
-                icon: Icon(Icons.folder_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.folder, color: C.primary),
-                label: 'ملفات'),
-            NavigationDestination(
-                icon: Icon(Icons.rocket_launch_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.rocket_launch, color: C.primary),
-                label: 'بوتي'),
-            NavigationDestination(
-                icon: Icon(Icons.menu, color: C.muted),
-                selectedIcon: Icon(Icons.menu, color: C.primary),
-                label: 'المزيد'),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(_labels.length, (i) {
+              final active = _i == i;
+              return Expanded(child: InkWell(
+                onTap: () => setState(() => _i = i),
+                borderRadius: BorderRadius.circular(14),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? C.primary.withValues(alpha: .12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                    border: active
+                        ? Border.all(color: C.primary.withValues(alpha: .3))
+                        : null,
+                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    PulseIcon(
+                      icon: _icons[i],
+                      active: active,
+                      size: 22,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_labels[i],
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: active
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          color: active ? C.primary : C.muted,
+                        )),
+                  ]),
+                ),
+              ));
+            }),
+          ),
         ),
       ),
     );

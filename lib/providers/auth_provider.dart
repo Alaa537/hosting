@@ -194,12 +194,15 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _ensureDeviceLockInBackground() async {
     try {
       final check = await api!.deviceCheck(deviceId);
-      final locked = check['locked'] == true;
-      final lockedUser = check['username']?.toString();
-      if (locked && lockedUser != null &&
-          lockedUser.toLowerCase() != (user?.username ?? '').toLowerCase()) {
-        deviceWarning = 'السيرفر يرى أن الجهاز مربوط بـ: $lockedUser';
+      // v5 response: { registered, bound_to_me, bound_at, last_seen }
+      final registered = check['registered'] == true;
+      final boundToMe = check['bound_to_me'] == true;
+
+      if (registered && !boundToMe) {
+        deviceWarning = 'الجهاز مربوط بحساب آخر.';
         notifyListeners();
+      } else if (!registered) {
+        try { await api!.deviceLock(); } catch (_) {}
       }
     } catch (_) {}
   }

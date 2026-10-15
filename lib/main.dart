@@ -30,7 +30,7 @@ class HostingApp extends StatelessWidget {
           if (child != null) child,
           Positioned(
             right: 16,
-            bottom: 90,
+            bottom: 180,  // ← فوق زر الرفع
             child: const TelegramFab(),
           ),
         ]),

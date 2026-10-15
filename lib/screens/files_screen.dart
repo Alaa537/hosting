@@ -22,14 +22,16 @@ class _FilesScreenState extends State<FilesScreen> {
   bool _hasReqs = false;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final api = context.read<AuthProvider>().api!;
       final c = await api.appRead();
-      // نتأكد من وجود app.py
       bool hasReqs = false;
       try {
         final st = await api.appStatus();
@@ -44,7 +46,10 @@ class _FilesScreenState extends State<FilesScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _err = friendlyError(e); _loading = false; });
+      setState(() {
+        _err = friendlyError(e);
+        _loading = false;
+      });
     }
   }
 
@@ -65,47 +70,61 @@ class _FilesScreenState extends State<FilesScreen> {
             Row(children: [
               const Icon(Icons.code, color: C.primary),
               const SizedBox(width: 8),
-              const Expanded(child: Text('app.py',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
+              const Expanded(
+                child: Text('app.py',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
               IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: C.muted)),
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: C.muted),
+              ),
             ]),
             const SizedBox(height: 8),
-            Expanded(child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A24),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: C.border),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A24),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: C.border),
+                ),
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: ctrl,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12.5,
+                    color: Colors.white,
+                    height: 1.5,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: 'اكتب الكود هنا…',
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: ctrl,
-                maxLines: null,
-                expands: true,
-                style: const TextStyle(
-                    fontFamily: 'monospace', fontSize: 12.5,
-                    color: Colors.white, height: 1.5),
-                decoration: const InputDecoration(
-                    border: InputBorder.none, hintText: 'اكتب الكود هنا…'),
-              ),
-            )),
+            ),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: C.muted,
-                  side: const BorderSide(color: C.border),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: C.muted,
+                    side: const BorderSide(color: C.border),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('إلغاء'),
                 ),
-                child: const Text('إلغاء'),
-              )),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: ElevatedButton(
-                onPressed: () => Navigator.pop(context, ctrl.text),
-                child: const Text('حفظ'),
-              )),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, ctrl.text),
+                  child: const Text('حفظ'),
+                ),
+              ),
             ]),
           ]),
         ),
@@ -174,114 +193,21 @@ class _FilesScreenState extends State<FilesScreen> {
       appBar: AppBar(
         title: const Text('ملفات البوت'),
         actions: [
-          IconButton(onPressed: _load,
-              icon: const Icon(Icons.refresh, color: C.primary)),
-          IconButton(onPressed: _upload,
-              icon: const Icon(Icons.upload_file, color: C.primary)),
-          IconButton(onPressed: _edit,
-              icon: const Icon(Icons.edit, color: C.primary)),
+          IconButton(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh, color: C.primary),
+          ),
+          IconButton(
+            onPressed: _upload,
+            icon: const Icon(Icons.upload_file, color: C.primary),
+          ),
+          IconButton(
+            onPressed: _edit,
+            icon: const Icon(Icons.edit, color: C.primary),
+          ),
         ],
       ),
-      body: SafeArea(child: _loading
-        ? const Center(child: CircularProgressIndicator(color: C.primary))
-        : _err != null
-          ? Center(child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: C.danger, size: 48),
-                  const SizedBox(height: 12),
-                  Text(_err!, textAlign: TextAlign.center,
-                      style: const TextStyle(color: C.danger)),
-                  const SizedBox(height: 12),
-                  ElevatedButton(onPressed: _load, child: const Text('إعادة')),
-                ],
-              )))
-          : ListView(padding: const EdgeInsets.all(16), children: [
-              // app.py card
-              _fileCard(
-                icon: Icons.code,
-                title: 'app.py',
-                subtitle: '${_content?.length ?? 0} حرف · ملف البوت',
-                color: C.primary,
-                onTap: _edit,
-                onUpload: _upload,
-              ),
-              const SizedBox(height: 12),
-
-              // requirements.txt card
-              _fileCard(
-                icon: Icons.description_outlined,
-                title: 'requirements.txt',
-                subtitle: _hasReqs
-                    ? '✅ موجود'
-                    : 'يُرفع مع app.py',
-                color: _hasReqs ? C.success : C.accent,
-                onTap: () => snack(context,
-                    'يُرفع مع app.py من زر الرفع أعلى الشاشة'),
-                onUpload: null,
-              ),
-
-              const SizedBox(height: 20),
-
-              // Info card
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: C.primary.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: C.primary.withValues(alpha: .25)),
-                ),
-                child: const Row(children: [
-                  Icon(Icons.info_outline, color: C.primary, size: 20),
-                  SizedBox(width: 10),
-                  Expanded(child: Text(
-                    'الوضع الحالي: تطبيق واحد فقط (app.py).\n'
-                    'ارفع ملفات .py إضافية داخل app.py كـ modules.',
-                    style: TextStyle(color: Colors.white70,
-                        fontSize: 12, height: 1.5),
-                  )),
-                ]),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Preview
-              if (_content != null && _content!.isNotEmpty) ...[
-                Row(children: [
-                  const Text('معاينة app.py',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  Text('${_content!.length} bytes',
-                      style: const TextStyle(color: C.muted, fontSize: 10,
-                          fontFamily: 'monospace')),
-                ]),
-                const SizedBox(height: 8),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 600),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A24),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: C.border),
-                  ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(12),
-                    child: HighlightView(
-                      _content!.length > 20000
-                          ? '${_content!.substring(0, 20000)}\n\n… (اقتصاص)'
-                          : _content!,
-                      language: 'python',
-                      theme: monokaiSublimeTheme,
-                      padding: EdgeInsets.zero,
-                      textStyle: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 11.5, height: 1.5),
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 30),
-            ]),
+      body: SafeArea(child: _buildBody()),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _edit,
         backgroundColor: C.primary,
@@ -291,6 +217,123 @@ class _FilesScreenState extends State<FilesScreen> {
             style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: C.primary),
+      );
+    }
+    if (_err != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: C.danger, size: 48),
+              const SizedBox(height: 12),
+              Text(_err!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: C.danger)),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _load, child: const Text('إعادة')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      // app.py card
+      _fileCard(
+        icon: Icons.code,
+        title: 'app.py',
+        subtitle: '${_content?.length ?? 0} حرف · ملف البوت',
+        color: C.primary,
+        onTap: _edit,
+        onUpload: _upload,
+      ),
+      const SizedBox(height: 12),
+
+      // requirements.txt card
+      _fileCard(
+        icon: Icons.description_outlined,
+        title: 'requirements.txt',
+        subtitle: _hasReqs ? '✅ موجود' : 'يُرفع مع app.py',
+        color: _hasReqs ? C.success : C.accent,
+        onTap: () => snack(context,
+            'يُرفع مع app.py من زر الرفع أعلى الشاشة'),
+        onUpload: null,
+      ),
+
+      const SizedBox(height: 20),
+
+      // Info card
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: C.primary.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: C.primary.withValues(alpha: .25)),
+        ),
+        child: const Row(children: [
+          Icon(Icons.info_outline, color: C.primary, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'الوضع الحالي: تطبيق واحد فقط (app.py).\n'
+              'ارفع ملفات .py إضافية داخل app.py كـ modules.',
+              style: TextStyle(
+                  color: Colors.white70, fontSize: 12, height: 1.5),
+            ),
+          ),
+        ]),
+      ),
+
+      const SizedBox(height: 20),
+
+      // Preview
+      if (_content != null && _content!.isNotEmpty) ...[
+        Row(children: [
+          const Text('معاينة app.py',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          const Spacer(),
+          Text('${_content!.length} bytes',
+              style: const TextStyle(
+                  color: C.muted,
+                  fontSize: 10,
+                  fontFamily: 'monospace')),
+        ]),
+        const SizedBox(height: 8),
+        Container(
+          constraints: const BoxConstraints(maxHeight: 600),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A24),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: C.border),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: HighlightView(
+              _content!.length > 20000
+                  ? '${_content!.substring(0, 20000)}\n\n… (اقتصاص)'
+                  : _content!,
+              language: 'python',
+              theme: monokaiSublimeTheme,
+              padding: EdgeInsets.zero,
+              textStyle: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 11.5,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+      const SizedBox(height: 90),
+    ]);
   }
 
   Widget _fileCard({
@@ -310,7 +353,8 @@ class _FilesScreenState extends State<FilesScreen> {
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: Container(
-          width: 46, height: 46,
+          width: 46,
+          height: 46,
           decoration: BoxDecoration(
             color: color.withValues(alpha: .15),
             borderRadius: BorderRadius.circular(12),
@@ -318,13 +362,15 @@ class _FilesScreenState extends State<FilesScreen> {
           child: Icon(icon, color: color, size: 24),
         ),
         title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            style:
+                const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
         subtitle: Text(subtitle,
             style: const TextStyle(color: C.muted, fontSize: 11)),
         trailing: onUpload != null
             ? IconButton(
                 onPressed: onUpload,
-                icon: Icon(Icons.upload_file, color: color, size: 20))
+                icon: Icon(Icons.upload_file, color: color, size: 20),
+              )
             : const Icon(Icons.chevron_right, color: C.muted),
         onTap: onTap,
       ),

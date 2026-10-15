@@ -609,5 +609,68 @@ class ApiClient {
     return WebSocket.connect(url);
   }
 
+  // ============ FILES (general file manager) ============
+
+  Future<List<Map<String, dynamic>>> listFiles({String directory = '/'}) async {
+    final l = await _get('/files', q: {'directory': directory}) as List;
+    return l.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> fileMeta(String path) async =>
+      Map<String, dynamic>.from(await _get('/files/meta', q: {'path': path}));
+
+  Future<Map<String, dynamic>> readFileRaw(String file) async =>
+      Map<String, dynamic>.from(await _get('/files/content', q: {'file': file}));
+
+  Future<void> writeFileRaw(String file, String content) =>
+      _post('/files/write', body: {'file': file, 'content': content});
+
+  Future<Map<String, dynamic>> uploadFile(File local, {String directory = '/'}) async {
+    final req = http.MultipartRequest('POST', _u('/files/upload', {'directory': directory}));
+    req.headers.addAll(_headers);
+    req.files.add(await http.MultipartFile.fromPath('f', local.path,
+        filename: local.uri.pathSegments.last));
+    final streamed = await req.send();
+    final r = await http.Response.fromStream(streamed);
+    return Map<String, dynamic>.from(_decode(r) ?? {});
+  }
+
+  Future<String> downloadUrl(String file) async {
+    final r = await _get('/files/download', q: {'file': file});
+    return (r as Map)['url'] as String;
+  }
+
+  Future<void> createFolder(String directory, String name) =>
+      _post('/files/folder', body: {'directory': directory, 'name': name});
+
+  Future<Map<String, dynamic>> filesBatch(String op, List<String> items, {
+    String root = '/', String? destination, List<String>? newNames, String? mode,
+  }) async {
+    final body = <String, dynamic>{'op': op, 'root': root, 'items': items};
+    if (destination != null) body['destination'] = destination;
+    if (newNames != null) body['new_names'] = newNames;
+    if (mode != null) body['mode'] = mode;
+    return Map<String, dynamic>.from(await _post('/files/batch', body: body));
+  }
+
+  Future<void> deleteFiles(String root, List<String> items) =>
+      filesBatch('delete', items, root: root);
+
+  Future<void> renameFile(String root, String oldName, String newName) =>
+      filesBatch('rename', [oldName], root: root, newNames: [newName]);
+
+  Future<void> moveFiles(String root, List<String> items, String dest) =>
+      filesBatch('move', items, root: root, destination: dest);
+
+  Future<void> chmodFiles(String root, List<String> items, String mode) =>
+      filesBatch('chmod', items, root: root, mode: mode);
+
+  Future<Map<String, dynamic>> searchFiles(String q,
+      {String directory = '/', int maxDepth = 3, int limit = 50}) async =>
+    Map<String, dynamic>.from(await _get('/files/search', q: {
+      'q': q, 'directory': directory,
+      'max_depth': maxDepth, 'limit': limit,
+    }));
+
   void dispose() => _http.close();
 }

@@ -357,62 +357,6 @@ class ApiClient {
   Future<void> appCommand(String cmd) =>
       _post('/app/command', body: {'command': cmd});
 
-  // ====== FILES ======
-  Future<List<FileItem>> listFiles([String dir = '/']) async {
-    final l = await _get('/files', q: {'directory': dir}) as List;
-    return l.map((e) => FileItem.fromJson(e)).toList();
-  }
-
-  Future<String> readFile(String f) async {
-    final r = await _get('/files/content', q: {'file': f});
-    if (r is Map) return r['content'] as String? ?? '';
-    return r.toString();
-  }
-
-  Future<void> writeFile(String f, String c) =>
-      _post('/files/write', body: {'file': f, 'content': c});
-
-  Future<void> mkdir(String root, String name) =>
-      _post('/files/mkdir', body: {'root': root, 'name': name});
-
-  Future<Map<String, dynamic>> filesBatch(String op, List<String> items,
-      {String root = '/', String? dest, List<String>? newNames, String? mode}) async {
-    final body = <String, dynamic>{'op': op, 'root': root, 'items': items};
-    if (dest != null) body['destination'] = dest;
-    if (newNames != null) body['new_names'] = newNames;
-    if (mode != null) body['mode'] = mode;
-    return Map<String, dynamic>.from(await _post('/files/batch', body: body));
-  }
-
-  Future<void> deleteFiles(String root, List<String> items) =>
-      filesBatch('delete', items, root: root);
-  Future<void> rename(String root, List<String> items, List<String> names) =>
-      filesBatch('rename', items, root: root, newNames: names);
-  Future<void> move(String root, List<String> items, String dest) =>
-      filesBatch('move', items, root: root, dest: dest);
-  Future<void> compress(String root, List<String> items) =>
-      filesBatch('compress', items, root: root);
-  Future<void> extract(String root, List<String> items) =>
-      filesBatch('extract', items, root: root);
-  Future<void> chmod(String root, List<String> items, String mode) =>
-      filesBatch('chmod', items, root: root, mode: mode);
-
-  Future<String> downloadUrl(String file) async {
-    final r = await _get('/files/download', q: {'file': file});
-    return (r as Map)['url'] as String;
-  }
-
-  Future<Map<String, dynamic>> uploadSmall(File local, String dir,
-      {String? name}) async {
-    final req = http.MultipartRequest('POST', _u('/files/upload', {'directory': dir}));
-    req.headers.addAll(_headers);
-    req.files.add(await http.MultipartFile.fromPath('f', local.path,
-        filename: name ?? local.uri.pathSegments.last));
-    final streamed = await req.send();
-    final r = await http.Response.fromStream(streamed);
-    return Map<String, dynamic>.from(_decode(r) ?? {});
-  }
-
   // ====== BACKUPS ======
   Future<Map<String, dynamic>> backups() async =>
       Map<String, dynamic>.from(await _get('/backups'));
@@ -635,11 +579,6 @@ class ApiClient {
     return Map<String, dynamic>.from(_decode(r) ?? {});
   }
 
-  Future<String> downloadUrl(String file) async {
-    final r = await _get('/files/download', q: {'file': file});
-    return (r as Map)['url'] as String;
-  }
-
   Future<void> createFolder(String directory, String name) =>
       _post('/files/folder', body: {'directory': directory, 'name': name});
 
@@ -652,9 +591,6 @@ class ApiClient {
     if (mode != null) body['mode'] = mode;
     return Map<String, dynamic>.from(await _post('/files/batch', body: body));
   }
-
-  Future<void> deleteFiles(String root, List<String> items) =>
-      filesBatch('delete', items, root: root);
 
   Future<void> renameFile(String root, String oldName, String newName) =>
       filesBatch('rename', [oldName], root: root, newNames: [newName]);

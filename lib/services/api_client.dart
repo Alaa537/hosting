@@ -181,11 +181,13 @@ class ApiClient {
       Map<String, dynamic>.from(await _get('/health'));
 
   Future<Map<String, dynamic>> login(String u, String p) async {
+    // NOTE: لا نرسل device_id في login body.
+    //       device_id يُرسَل فقط عبر X-Device-Id header (لكل طلب)
+    //       و /auth/device-lock (بعد الدخول).
+    //       إرساله هنا يجعل السيرفر يرفض الدخول إذا كان الجهاز
+    //       مربوطاً بحساب قديم.
     final body = <String, dynamic>{
       'username': u, 'password': p,
-      if (_deviceId != null) 'device_id': _deviceId,
-      if (_deviceId != null) 'platform': Platform.operatingSystem,
-      if (_deviceId != null) 'app_version': _appVersion,
     };
     final r = await _send('POST', '/auth/login', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);
@@ -197,11 +199,9 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> register(String u, String p, String invite) async {
+    // NOTE: device_id يُسجَّل فقط عبر /auth/device-lock بعد الإنشاء.
     final body = <String, dynamic>{
       'username': u, 'password': p, 'invite': invite,
-      if (_deviceId != null) 'device_id': _deviceId,
-      if (_deviceId != null) 'platform': Platform.operatingSystem,
-      if (_deviceId != null) 'app_version': _appVersion,
     };
     final r = await _send('POST', '/auth/register', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);

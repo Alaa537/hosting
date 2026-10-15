@@ -1,30 +1,51 @@
+import 'dart:convert';
 import 'dart:math';
+import 'package:crypto/crypto.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../services/storage.dart';
 
-/// Generates and persists a stable per-install device id.
-/// Format: `flt-<random-hex>`.
+/// Stable device id + client-side device lock.
+/// device_id format: "flt-" + sha256(fingerprint)[0..24]
 class DeviceInfo {
-  static String? _cached;
+  static String? _cachedId;
 
-  /// Returns the persistent device id (generates one on first call).
+  /// Returns a *stable* device id that survives app reinstalls.
   static Future<String> deviceId() async {
-    if (_cached != null) return _cached!;
+    if (_cachedId != null) return _cachedId!;
+
+    // 1) already stored?
     final existing = await Store.readDeviceId();
     if (existing != null && existing.isNotEmpty) {
-      _cached = existing;
+      _cachedId = existing;
       return existing;
     }
-    final rnd = Random.secure();
-    final bytes = List<int>.generate(12, (_) => rnd.nextInt(256));
-    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    final id = 'flt-$hex';
+
+    // 2) generate from fingerprint
+    String raw = 'unknown';
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final a = await DeviceInfoPlugin().androidInfo;
+        raw = '${a.id}|${a.model}|${a.device}|${a.fingerprint}';
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final i = await DeviceInfoPlugin().iosInfo;
+        raw = '${i.identifierForVendor}|${i.model}|${i.systemVersion}';
+      } else {
+        final rnd = Random.secure();
+        raw = List.generate(16, (_) => rnd.nextInt(256)).join('-');
+      }
+    } catch (_) {
+      final rnd = Random.secure();
+      raw = List.generate(16, (_) => rnd.nextInt(256)).join('-');
+    }
+
+    final hash = sha256.convert(utf8.encode(raw)).toString();
+    final id = 'flt-${hash.substring(0, 24)}';
     await Store.saveDeviceId(id);
-    _cached = id;
+    _cachedId = id;
     return id;
   }
 
-  /// Best-effort platform tag.
   static String get platform {
     if (kIsWeb) return 'web';
     switch (defaultTargetPlatform) {
@@ -35,5 +56,35 @@ class DeviceInfo {
       case TargetPlatform.linux: return 'linux';
       default: return 'unknown';
     }
+  }
+
+  /// Human-readable model name for the /auth body.
+  static Future<String> modelName() async {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final a = await DeviceInfoPlugin().androidInfo;
+        return '${a.manufacturer} ${a.model}';
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final i = await DeviceInfoPlugin().iosInfo;
+        return i.name;
+      }
+    } catch (_) {}
+    return 'Unknown';
+  }
+
+  // ---------------- client-side lock helpers ----------------
+  static Future<String?> checkDeviceLock(String username) async {
+    final locked = await Store.getLockedUser();
+    if (locked == null || locked.isEmpty) return null;
+    if (locked.toLowerCase() == username.toLowerCase()) return null;
+    return 'هذا الجهاز مسجّل بحساب آخر: $locked';
+  }
+
+  static Future<void> lockDeviceTo(String username) async {
+    await Store.setLockedUser(username);
+  }
+
+  static Future<void> unlockDevice() async {
+    await Store.setLockedUser(null);
   }
 }

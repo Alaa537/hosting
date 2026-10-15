@@ -16,8 +16,6 @@ class AuthProvider extends ChangeNotifier {
   String appVersion = '1.0.0';
   Bootstrap? bootstrap_;
   String? blockedReason;
-
-  /// تنبيه يُعرض للمستخدم بعد الدخول (مثل "الجهاز مربوط بحساب آخر")
   String? deviceWarning;
 
   // =========================================================
@@ -41,7 +39,6 @@ class AuthProvider extends ChangeNotifier {
       api!.setTokens(access: token, refresh: refresh);
     }
 
-    // محاولة دخول تلقائي بـ refresh token
     if (refresh != null) {
       try {
         user = await api!.me();
@@ -82,42 +79,59 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // =========================================================
-  //  LOGIN — بدون device_id في الـ body
+  //  LOGIN
   // =========================================================
   Future<String?> login(String u, String p) async {
     try {
-      // ignore: avoid_print
-      print('[AUTH] login attempt user=$u device=$deviceId');
+      final model = await DeviceInfo.modelName();
+      final r = await api!.login(u, p, modelName: model);
 
-      // 1) إرسال بيانات الدخول فقط
-      await api!.login(u, p);
-
-      // 2) حفظ التوكن
       await Store.saveTokens(api!.token, api!.refreshToken);
       await Store.saveUsernameHint(u);
-
-      // 3) جلب بيانات المستخدم
       user = await api!.me();
       state = AuthState.loggedIn;
       deviceWarning = null;
       notifyListeners();
 
-      // 4) فحص الجهاز في الخلفية (بدون حجب المستخدم)
-      _ensureDeviceLockInBackground();
+      // client-side lock
+      await DeviceInfo.lockDeviceTo(u);
 
+      _ensureDeviceLockInBackground();
       await _loadBootstrapSafe();
       return null;
-    } on HostingException catch (e) {
-      // ignore: avoid_print
-      print('[AUTH] login failed status=${e.status} detail=${e.detail}');
-      if (e.status == 401 || e.status == 403) {
-        return 'اسم المستخدم أو كلمة المرور خطأ ($e.status)';
+    } on ConflictException catch (e) {
+      final code = e.code;
+      if (code.contains('device is linked to another')) {
+        return 'هذا الجهاز مسجّل بحساب آخر.\n'
+               'تواصل مع الدعم لفك القفل.';
       }
-      if (e.status == 0) return 'تعذّر الاتصال بالسيرفر';
-      return e.message;
+      if (code.contains('account is locked to another device')) {
+        return 'هذا الحساب مربوط بجهاز آخر.\n'
+               'تواصل مع الدعم.';
+      }
+      return code.isNotEmpty ? code : 'خطأ تعارض في البيانات';
+    } on AuthException catch (e) {
+      final msg = _detail(e);
+      if (msg.contains('PENDING_APPROVAL')) {
+        return 'حسابك بانتظار موافقة الأدمن.';
+      }
+      if (msg.contains('Banned')) {
+        return 'تم حظر حسابك.\n$msg';
+      }
+      if (msg.contains('REJECTED')) {
+        return 'تم رفض حسابك.\n$msg';
+      }
+      if (e.status == 401) {
+        return 'اسم المستخدم أو كلمة المرور خطأ';
+      }
+      if (msg.contains('Maintenance')) {
+        return 'السيرفر في وضع الصيانة.';
+      }
+      return msg.isNotEmpty ? msg : 'فشل تسجيل الدخول (${e.status})';
+    } on HostingException catch (e) {
+      if (e.status == 0) return 'تعذّر الاتصال بالسيرفر.';
+      return _detail(e);
     } catch (e) {
-      // ignore: avoid_print
-      print('[AUTH] login exception: $e');
       return 'خطأ: $e';
     }
   }
@@ -127,7 +141,9 @@ class AuthProvider extends ChangeNotifier {
   // =========================================================
   Future<String?> register(String u, String p, String invite) async {
     try {
-      final r = await api!.register(u, p, invite);
+      final model = await DeviceInfo.modelName();
+      final r = await api!.register(u, p, invite, modelName: model);
+
       if (r['token'] != null) {
         await Store.saveTokens(api!.token, api!.refreshToken);
         await Store.saveUsernameHint(u);
@@ -135,60 +151,59 @@ class AuthProvider extends ChangeNotifier {
         state = AuthState.loggedIn;
         deviceWarning = null;
         notifyListeners();
+        await DeviceInfo.lockDeviceTo(u);
         _ensureDeviceLockInBackground();
         await _loadBootstrapSafe();
         return null;
       }
       return 'PENDING:${r['message'] ?? 'قيد المراجعة'}';
+    } on ConflictException catch (e) {
+      final code = e.code;
+      if (code.contains('device is already registered') ||
+          code.contains('device is linked')) {
+        return 'هذا الجهاز مسجّل بالفعل.\n'
+               'لا يمكن إنشاء حساب جديد من نفس الجهاز.';
+      }
+      if (code.contains('Username already exists')) {
+        return 'اسم المستخدم مستخدم مسبقاً.';
+      }
+      return code.isNotEmpty ? code : 'تعارض في البيانات';
+    } on AuthException catch (e) {
+      final msg = _detail(e);
+      if (msg.contains('Registration closed')) return 'التسجيل مغلق حالياً.';
+      if (msg.contains('Invalid invite')) return 'كود الدعوة غير صحيح.';
+      return msg.isNotEmpty ? msg : 'فشل التسجيل (${e.status})';
     } on HostingException catch (e) {
-      // ignore: avoid_print
-      print('[AUTH] register failed: ${e.status} ${e.detail}');
-      return e.message;
+      if (e.status == 0) return 'تعذّر الاتصال بالسيرفر.';
+      return _detail(e);
     } catch (e) {
       return 'خطأ: $e';
     }
   }
 
+  String _detail(HostingException e) {
+    if (e.detail is Map && e.detail['detail'] != null) {
+      return e.detail['detail'].toString();
+    }
+    return e.detail?.toString() ?? '';
+  }
+
   // =========================================================
-  //  DEVICE LOCK — يعمل بعد الدخول فقط
+  //  DEVICE CHECK (background)
   // =========================================================
   Future<void> _ensureDeviceLockInBackground() async {
     try {
-      // 1) هل الجهاز مربوط؟
       final check = await api!.deviceCheck(deviceId);
-      // ignore: avoid_print
-      print('[AUTH] device check: $check');
-
       final locked = check['locked'] == true;
       final lockedUser = check['username']?.toString();
-
-      if (!locked) {
-        // الجهاز جديد — نربطه بالحساب الحالي
-        try {
-          await api!.deviceLock();
-          // ignore: avoid_print
-          print('[AUTH] device locked to ${user?.username}');
-        } catch (e) {
-          // ignore: avoid_print
-          print('[AUTH] device lock failed: $e');
-        }
-      } else if (lockedUser != null &&
-                 lockedUser.toLowerCase() != (user?.username ?? '').toLowerCase()) {
-        // الجهاز مربوط بحساب آخر
-        deviceWarning = 'هذا الجهاز مربوط بحساب آخر: $lockedUser\n'
-                        'قد تُمنع بعض الميزات.';
+      if (locked && lockedUser != null &&
+          lockedUser.toLowerCase() != (user?.username ?? '').toLowerCase()) {
+        deviceWarning = 'السيرفر يرى أن الجهاز مربوط بـ: $lockedUser';
         notifyListeners();
-        // ignore: avoid_print
-        print('[AUTH] device locked to another user: $lockedUser');
       }
-      // else: الجهاز مربوط بنفس المستخدم → لا شيء
-    } catch (e) {
-      // ignore: avoid_print
-      print('[AUTH] device check skipped: $e');
-    }
+    } catch (_) {}
   }
 
-  /// إخفاء التنبيه (عند عرضه للمستخدم)
   void clearDeviceWarning() {
     deviceWarning = null;
     notifyListeners();
@@ -215,9 +230,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // =========================================================
-  //  BASE URL
-  // =========================================================
   Future<void> setBase(String b) async {
     baseUrl = b;
     api?.dispose();

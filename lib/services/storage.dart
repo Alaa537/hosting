@@ -81,4 +81,22 @@ class Store {
     await _secure.delete(key: _kToken);
     await _secure.delete(key: _kRefresh);
   }
+
+  // ============ DEVICE LOCK (client-side) ============
+  static const _kLockedUser = 'locked_device_user';
+
+  static Future<String?> getLockedUser() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_kLockedUser);
+  }
+
+  static Future<void> setLockedUser(String? user) async {
+    final p = await SharedPreferences.getInstance();
+    if (user == null) {
+      await p.remove(_kLockedUser);
+    } else {
+      await p.setString(_kLockedUser, user);
+    }
+  }
+
 }

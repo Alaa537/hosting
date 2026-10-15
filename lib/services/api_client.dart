@@ -28,6 +28,16 @@ class TokenExpiredException extends AuthException {
   TokenExpiredException(super.status, super.detail, super.url);
 }
 
+class ConflictException extends HostingException {
+  ConflictException(super.status, super.detail, super.url);
+  String get code {
+    if (detail is Map && detail['detail'] != null) {
+      return detail['detail'].toString();
+    }
+    return detail?.toString() ?? '';
+  }
+}
+
 typedef TokenCallback = void Function(String? access, String? refresh);
 
 class ApiClient {
@@ -89,14 +99,34 @@ class ApiClient {
       dynamic detail;
       try { detail = jsonDecode(r.body); }
       catch (_) { detail = r.body.isNotEmpty ? r.body : r.reasonPhrase; }
-      if (r.statusCode == 401 || r.statusCode == 403) {
-        if (r.body.contains('ACCESS_TOKEN_EXPIRED') ||
-            r.body.contains('TOKEN_EXPIRED')) {
-          throw TokenExpiredException(r.statusCode, detail, r.request?.url.toString() ?? '');
+
+      final detailStr = _detailString(detail);
+
+      // 401 — expired access token
+      if (r.statusCode == 401) {
+        if (detailStr.contains('ACCESS_TOKEN_EXPIRED') ||
+            detailStr.contains('TOKEN_EXPIRED')) {
+          throw TokenExpiredException(r.statusCode, detail,
+              r.request?.url.toString() ?? '');
         }
-        throw AuthException(r.statusCode, detail, r.request?.url.toString() ?? '');
+        throw AuthException(r.statusCode, detail,
+            r.request?.url.toString() ?? '');
       }
-      throw HostingException(r.statusCode, detail, r.request?.url.toString() ?? '');
+
+      // 403 — pending / banned / rejected / admin only
+      if (r.statusCode == 403) {
+        throw AuthException(r.statusCode, detail,
+            r.request?.url.toString() ?? '');
+      }
+
+      // 409 — device lock / username exists
+      if (r.statusCode == 409) {
+        throw ConflictException(r.statusCode, detail,
+            r.request?.url.toString() ?? '');
+      }
+
+      throw HostingException(r.statusCode, detail,
+          r.request?.url.toString() ?? '');
     }
     if (r.body.isEmpty) return null;
     final ct = r.headers['content-type'] ?? '';
@@ -104,6 +134,13 @@ class ApiClient {
       try { return jsonDecode(r.body); } catch (_) { return r.body; }
     }
     return r.body;
+  }
+
+  static String _detailString(dynamic detail) {
+    if (detail is Map && detail['detail'] != null) {
+      return detail['detail'].toString();
+    }
+    return detail?.toString() ?? '';
   }
 
   Future<bool> refresh() async {
@@ -180,14 +217,15 @@ class ApiClient {
   Future<Map<String, dynamic>> health() async =>
       Map<String, dynamic>.from(await _get('/health'));
 
-  Future<Map<String, dynamic>> login(String u, String p) async {
-    // NOTE: لا نرسل device_id في login body.
-    //       device_id يُرسَل فقط عبر X-Device-Id header (لكل طلب)
-    //       و /auth/device-lock (بعد الدخول).
-    //       إرساله هنا يجعل السيرفر يرفض الدخول إذا كان الجهاز
-    //       مربوطاً بحساب قديم.
+  Future<Map<String, dynamic>> login(String u, String p, {String? modelName}) async {
+    // v4: device_id REQUIRED in body
     final body = <String, dynamic>{
-      'username': u, 'password': p,
+      'username': u,
+      'password': p,
+      if (_deviceId != null) 'device_id': _deviceId,
+      if (_deviceId != null) 'platform': Platform.operatingSystem,
+      if (modelName != null) 'model': modelName,
+      'app_version': _appVersion,
     };
     final r = await _send('POST', '/auth/login', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);
@@ -198,10 +236,17 @@ class ApiClient {
     return m;
   }
 
-  Future<Map<String, dynamic>> register(String u, String p, String invite) async {
-    // NOTE: device_id يُسجَّل فقط عبر /auth/device-lock بعد الإنشاء.
+  Future<Map<String, dynamic>> register(String u, String p, String invite,
+      {String? modelName}) async {
+    // v4: device_id REQUIRED in body
     final body = <String, dynamic>{
-      'username': u, 'password': p, 'invite': invite,
+      'username': u,
+      'password': p,
+      'invite': invite,
+      if (_deviceId != null) 'device_id': _deviceId,
+      if (_deviceId != null) 'platform': Platform.operatingSystem,
+      if (modelName != null) 'model': modelName,
+      'app_version': _appVersion,
     };
     final r = await _send('POST', '/auth/register', body: body, retry: false);
     final m = Map<String, dynamic>.from(r);

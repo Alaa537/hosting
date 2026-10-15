@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -92,6 +93,8 @@ class SecurityBlockScreen extends StatelessWidget {
         return ('🐛', 'تحت التصحيح', 'أغلق الـ Debugger', C.danger);
       case SecurityStatus.xposed:
         return ('🧩', 'Xposed مكتشف', 'أزل Xposed', C.danger);
+      case SecurityStatus.emulator:
+        return ('💻', 'محاكي مكتشف', 'لا يعمل على المحاكي', C.danger);
       case SecurityStatus.error:
         return ('⚠️', 'خطأ', result.message ?? 'غير معروف', C.warning);
       case SecurityStatus.ok:

@@ -24,7 +24,8 @@ class _ServerScreenState extends State<ServerScreen> {
 
   @override
   void initState() {
-    super.initState(); _load();
+    super.initState();
+    _load();
     _t = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
 
@@ -41,7 +42,7 @@ class _ServerScreenState extends State<ServerScreen> {
       final msg = friendlyError(e);
       setState(() {
         _err = msg;
-        _noServer = msg.contains('لا يوجد سيرفر');
+        _noServer = msg.contains('لا يوجد سيرفر') || msg.contains('404');
         _loading = false;
       });
     }
@@ -59,74 +60,30 @@ class _ServerScreenState extends State<ServerScreen> {
     }
   }
 
+  // ✅ FIXED: Auto-restart now properly toggles and updates state
   Future<void> _autoRestart() async {
     final auth = context.read<AuthProvider>();
     try {
-      final cur = auth.user?.autoRestart ?? false;
-      await auth.api!.setAutoRestart(!cur);
+      final current = auth.user?.autoRestart ?? false;
+      final newValue = !current;
+
+      // أرسل الأمر
+      await auth.api!.setAutoRestart(newValue);
+
+      // حدّث بيانات المستخدم من السيرفر
       await auth.refreshMe();
-      if (mounted) snack(context, !cur ? 'تم تشغيل إعادة التشغيل التلقائي' : 'تم إيقافه');
-    } catch (e) {
-      if (mounted) snack(context, friendlyError(e), error: true);
-    }
-  }
 
-  Future<void> _startupVars() async {
-    try {
-      final data = await context.read<AuthProvider>().api!.startup();
       if (!mounted) return;
-      final vars = (data['variables'] as List? ?? []).cast<Map>();
-      await showModalBottomSheet(context: context,
-        backgroundColor: C.surface, isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (_) => DraggableScrollableSheet(expand: false,
-          initialChildSize: .6, maxChildSize: .9,
-          builder: (_, ctrl) => ListView(
-            controller: ctrl, padding: const EdgeInsets.all(16),
-            children: [
-              const Text('متغيرات بدء التشغيل',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(data['command'] ?? '',
-                  style: const TextStyle(color: C.muted, fontSize: 11)),
-              const Divider(height: 24),
-              ...vars.map((v) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(v['key'] ?? '', style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13)),
-                subtitle: Text('${v['value'] ?? ''}',
-                    style: const TextStyle(color: C.muted, fontSize: 11),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                trailing: const Icon(Icons.edit, color: C.primary, size: 18),
-                onTap: () async {
-                  final n = await promptText(context, 'تعديل ${v['key']}',
-                      initial: '${v['value'] ?? ''}');
-                  if (n != null && mounted) {
-                    try {
-                      await context.read<AuthProvider>().api!
-                          .setStartupVar(v['key'], n);
-                      if (mounted) { Navigator.pop(context); snack(context, 'تم الحفظ'); }
-                    } catch (e) {
-                      if (mounted) snack(context, friendlyError(e), error: true);
-                    }
-                  }
-                },
-              )),
-            ],
-          )));
-    } catch (e) {
-      if (mounted) snack(context, friendlyError(e), error: true);
-    }
-  }
 
-  Future<void> _reinstall() async {
-    if (!await confirm(context, 'إعادة تثبيت السيرفر؟',
-        msg: 'سيتم مسح كل الملفات والبدء من جديد.', danger: true)) return;
-    if (!mounted) return;
-    try {
-      await context.read<AuthProvider>().api!.reinstall();
-      if (mounted) snack(context, 'بدأت إعادة التثبيت');
+      // تحقق أن القيمة تغيرت فعلاً
+      final updated = auth.user?.autoRestart ?? newValue;
+      if (updated == newValue) {
+        snack(context, newValue
+            ? '✅ تم تفعيل إعادة التشغيل التلقائي'
+            : '⛔ تم إيقاف إعادة التشغيل التلقائي');
+      } else {
+        snackInfo(context, 'القيمة لم تتغير — أعد المحاولة');
+      }
     } catch (e) {
       if (mounted) snack(context, friendlyError(e), error: true);
     }
@@ -135,38 +92,110 @@ class _ServerScreenState extends State<ServerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Server'),
-        actions: [IconButton(onPressed: _load,
-            icon: const Icon(Icons.refresh, color: C.primary))]),
+      appBar: AppBar(
+        title: const Text('السيرفر'),
+        actions: [
+          IconButton(onPressed: _load,
+              icon: const Icon(Icons.refresh, color: C.primary)),
+        ],
+      ),
       body: SafeArea(child: _loading
         ? const Center(child: CircularProgressIndicator(color: C.primary))
-        : RefreshIndicator(onRefresh: _load, color: C.primary,
-          backgroundColor: C.surface,
-          child: ListView(padding: const EdgeInsets.all(16), children: [
-            if (_noServer) _noServerCard(),
-            if (_err != null && !_noServer) _errCard(),
-            if (_r != null) ...[
-              _statsCard(_r!),
-              const SizedBox(height: 16),
-              SectionCard(title: 'التحكم', child: Wrap(spacing: 8, runSpacing: 8, children: [
-                _action(Icons.play_arrow, 'تشغيل', C.success, () => _power('start')),
-                _action(Icons.restart_alt, 'إعادة', C.warning, () => _power('restart')),
-                _action(Icons.stop, 'إيقاف', C.info, () => _power('stop')),
-                _action(Icons.power_settings_new, 'Kill', C.danger,
-                    () => _power('kill', danger: true,
-                        confirmMsg: 'إجبار الإيقاف؟')),
-              ])),
-              const SizedBox(height: 14),
-              SectionCard(title: 'إعدادات', child: Column(children: [
-                _listAction(Icons.autorenew, 'إعادة التشغيل التلقائي', _autoRestart),
-                _listAction(Icons.tune, 'متغيرات البدء', _startupVars),
-                _listAction(Icons.warning_amber_rounded, 'إعادة التثبيت', _reinstall,
-                    danger: true),
-              ])),
-            ],
-            const SizedBox(height: 30),
-          ]),
+        : RefreshIndicator(
+            onRefresh: _load,
+            color: C.primary,
+            backgroundColor: C.surface,
+            child: ListView(padding: const EdgeInsets.all(16), children: [
+              if (_noServer) _noServerCard(),
+              if (_err != null && !_noServer) _errCard(),
+              if (_r != null) ...[
+                _statsCard(_r!),
+                const SizedBox(height: 16),
+
+                // Power controls
+                SectionCard(
+                  title: 'التحكم في الطاقة',
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    _action(Icons.play_arrow, 'تشغيل', C.success,
+                        () => _power('start')),
+                    _action(Icons.restart_alt, 'إعادة', C.warning,
+                        () => _power('restart')),
+                    _action(Icons.stop, 'إيقاف', C.info,
+                        () => _power('stop')),
+                    _action(Icons.power_settings_new, 'Kill', C.danger,
+                        () => _power('kill', danger: true,
+                            confirmMsg: 'إجبار الإيقاف؟')),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // Auto-restart with current state
+                _autoRestartCard(),
+              ],
+              const SizedBox(height: 30),
+            ]),
+          )),
+    );
+  }
+
+  // ✅ NEW: Dedicated card for auto-restart with visual state
+  Widget _autoRestartCard() {
+    final auth = context.watch<AuthProvider>();
+    final enabled = auth.user?.autoRestart ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: C.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: enabled
+              ? C.success.withValues(alpha: .5)
+              : C.border,
+          width: enabled ? 1.5 : 1,
+        ),
+        boxShadow: enabled
+            ? [BoxShadow(
+                color: C.success.withValues(alpha: .15),
+                blurRadius: 20, spreadRadius: 2)]
+            : [],
+      ),
+      child: Row(children: [
+        Container(
+          width: 46, height: 46,
+          decoration: BoxDecoration(
+            color: (enabled ? C.success : C.muted).withValues(alpha: .15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            enabled ? Icons.autorenew : Icons.block,
+            color: enabled ? C.success : C.muted,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('إعادة التشغيل التلقائي',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            const SizedBox(height: 2),
+            Text(
+              enabled ? 'مُفعّل — يعيد التشغيل عند الانهيار'
+                     : 'متوقف — لن يُعاد التشغيل تلقائياً',
+              style: TextStyle(
+                color: enabled ? C.success : C.muted,
+                fontSize: 11, fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         )),
+        Switch(
+          value: enabled,
+          onChanged: (_) => _autoRestart(),
+          activeColor: C.success,
+        ),
+      ]),
     );
   }
 
@@ -181,7 +210,8 @@ class _ServerScreenState extends State<ServerScreen> {
       const Icon(Icons.dns_outlined, color: C.warning, size: 36),
       const SizedBox(height: 10),
       const Text('لا يوجد سيرفر',
-          style: TextStyle(color: C.warning, fontSize: 16, fontWeight: FontWeight.w800)),
+          style: TextStyle(color: C.warning, fontSize: 16,
+              fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
       const Text('لم يتم تخصيص سيرفر لحسابك بعد.',
           textAlign: TextAlign.center,
@@ -199,7 +229,8 @@ class _ServerScreenState extends State<ServerScreen> {
     child: Row(children: [
       const Icon(Icons.wifi_off, color: C.danger, size: 20),
       const SizedBox(width: 10),
-      Expanded(child: Text(_err!, style: const TextStyle(color: C.danger, fontSize: 12))),
+      Expanded(child: Text(_err!,
+          style: const TextStyle(color: C.danger, fontSize: 12))),
     ]),
   );
 
@@ -213,10 +244,12 @@ class _ServerScreenState extends State<ServerScreen> {
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(width: 10, height: 10,
-          decoration: BoxDecoration(color: stateColor(r.state), shape: BoxShape.circle)),
+          decoration: BoxDecoration(color: stateColor(r.state),
+              shape: BoxShape.circle)),
         const SizedBox(width: 8),
         Expanded(child: Text(r.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+            style: const TextStyle(fontSize: 16,
+                fontWeight: FontWeight.w700))),
         Text(r.state.toUpperCase(),
             style: TextStyle(color: stateColor(r.state),
                 fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
@@ -225,7 +258,8 @@ class _ServerScreenState extends State<ServerScreen> {
       Row(children: [
         const Icon(Icons.timer_outlined, size: 14, color: C.muted),
         const SizedBox(width: 4),
-        Text(fTime(r.uptimeSeconds), style: const TextStyle(color: C.muted, fontSize: 12)),
+        Text(fTime(r.uptimeSeconds),
+            style: const TextStyle(color: C.muted, fontSize: 12)),
       ]),
       const SizedBox(height: 18),
       _bar('CPU', r.cpu, null, null),
@@ -248,7 +282,8 @@ class _ServerScreenState extends State<ServerScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         SizedBox(width: 42, child: Text(label,
-            style: const TextStyle(color: C.muted, fontSize: 11, fontWeight: FontWeight.w700))),
+            style: const TextStyle(color: C.muted, fontSize: 11,
+                fontWeight: FontWeight.w700))),
         Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(value: (v / 100).clamp(0, 1),
             minHeight: 6, backgroundColor: C.border,
@@ -256,7 +291,8 @@ class _ServerScreenState extends State<ServerScreen> {
         const SizedBox(width: 10),
         SizedBox(width: 44, child: Text('${v.toStringAsFixed(1)}%',
             textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+            style: const TextStyle(fontSize: 11,
+                fontWeight: FontWeight.w700))),
       ]),
       if (limit != null && limit > 0) Padding(
         padding: const EdgeInsets.only(left: 42, top: 3),
@@ -266,31 +302,25 @@ class _ServerScreenState extends State<ServerScreen> {
     ]);
   }
 
-  Widget _net(String a, String v, Color c) => Row(mainAxisSize: MainAxisSize.min, children: [
-    Text(a, style: TextStyle(color: c, fontSize: 14)),
-    const SizedBox(width: 4),
-    Text(v, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-  ]);
+  Widget _net(String a, String v, Color c) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(a, style: TextStyle(color: c, fontSize: 14)),
+        const SizedBox(width: 4),
+        Text(v, style: const TextStyle(fontSize: 12,
+            fontWeight: FontWeight.w600)),
+      ]);
 
   Widget _action(IconData ic, String label, Color color, VoidCallback onTap) {
-    return Material(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(12),
+    return Material(color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(12),
-        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Padding(padding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 12),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(ic, color: color, size: 18),
             const SizedBox(width: 8),
             Text(label, style: TextStyle(color: color,
                 fontWeight: FontWeight.w700, fontSize: 13)),
           ]))));
-  }
-
-  Widget _listAction(IconData ic, String t, VoidCallback onTap, {bool danger = false}) {
-    return ListTile(contentPadding: EdgeInsets.zero,
-      leading: Icon(ic, color: danger ? C.danger : C.primary),
-      title: Text(t, style: TextStyle(
-          fontWeight: FontWeight.w600, fontSize: 14,
-          color: danger ? C.danger : null)),
-      trailing: const Icon(Icons.chevron_right, color: C.muted),
-      onTap: onTap);
   }
 }

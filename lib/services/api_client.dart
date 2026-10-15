@@ -608,5 +608,13 @@ class ApiClient {
       'max_depth': maxDepth, 'limit': limit,
     }));
 
+  Future<String> downloadUrl(String file) async {
+    final r = await _get('/files/download', q: {'file': file});
+    return (r as Map)['url'] as String;
+  }
+
+  Future<void> deleteFiles(String root, List<String> items) =>
+      filesBatch('delete', items, root: root);
+
   void dispose() => _http.close();
 }

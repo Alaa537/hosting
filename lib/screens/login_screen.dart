@@ -49,7 +49,8 @@ class _LoginScreenState extends State<LoginScreen>
     if (!mounted) return;
     setState(() => _busy = false);
     if (e != null) {
-      _showError('فشل تسجيل الدخول', 'اسم المستخدم أو كلمة المرور خطأ');
+      // ← عرض الرسالة الفعلية من AuthProvider
+      _showError('فشل تسجيل الدخول', e);
     }
   }
 

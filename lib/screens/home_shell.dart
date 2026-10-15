@@ -41,7 +41,6 @@ class _HomeShellState extends State<HomeShell> {
     final banners = bs?.banners ?? const [];
 
     return Scaffold(
-      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: Column(children: [
@@ -68,7 +67,7 @@ class _HomeShellState extends State<HomeShell> {
         ]),
       ),
       bottomNavigationBar: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
         decoration: BoxDecoration(
           color: C.surface.withValues(alpha: .92),
           borderRadius: BorderRadius.circular(20),

@@ -29,8 +29,8 @@ class HostingApp extends StatelessWidget {
         builder: (context, child) => Stack(children: [
           if (child != null) child,
           Positioned(
-            right: 16,
-            bottom: 180,  // ← فوق زر الرفع
+            left: 16,   // ← على اليسار
+            bottom: 100,
             child: const TelegramFab(),
           ),
         ]),

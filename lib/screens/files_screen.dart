@@ -453,12 +453,16 @@ class _FilesScreenState extends State<FilesScreen> {
       body: SafeArea(child: _buildBody()),
       floatingActionButton: _selectionMode
           ? null
-          : FloatingActionButton(
+          : FloatingActionButton.extended(
               onPressed: _upload,
               backgroundColor: C.primary,
               foregroundColor: Colors.black,
-              child: const Icon(Icons.upload),
+              icon: const Icon(Icons.upload_file),
+              label: const Text('رفع',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
             ),
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.endFloat,
     );
   }
 

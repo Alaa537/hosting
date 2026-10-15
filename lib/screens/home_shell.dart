@@ -21,7 +21,7 @@ class _HomeShellState extends State<HomeShell> {
     DashboardScreen(),
     ServerScreen(),
     FilesScreen(),
-    AppScreen(),      // ← كان BotsScreen
+    AppScreen(),
     MoreScreen(),
   ];
 
@@ -36,35 +36,62 @@ class _HomeShellState extends State<HomeShell> {
         child: Column(children: [
           if (banners.isNotEmpty)
             ...banners.map((b) => BannerStrip(banner: b)),
-          Expanded(child: IndexedStack(index: _i, children: _tabs)),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.98, end: 1).animate(
+                      CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+                  child: child,
+                ),
+              ),
+              child: IndexedStack(
+                  key: ValueKey(_i), index: _i, children: _tabs),
+            ),
+          ),
         ]),
       ),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: C.border)),
+        decoration: BoxDecoration(
+          color: C.surface,
+          border: const Border(top: BorderSide(color: C.border)),
+          boxShadow: [
+            BoxShadow(
+                color: C.primary.withValues(alpha: .08),
+                blurRadius: 20,
+                spreadRadius: 1),
+          ],
         ),
         child: NavigationBar(
           selectedIndex: _i,
           onDestinationSelected: (v) => setState(() => _i = v),
-          backgroundColor: C.surface,
+          backgroundColor: Colors.transparent,
           indicatorColor: C.primary.withValues(alpha: .15),
+          elevation: 0,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
             NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dashboard, color: C.primary), label: 'لوحة'),
+                selectedIcon: Icon(Icons.dashboard, color: C.primary),
+                label: 'لوحة'),
             NavigationDestination(
                 icon: Icon(Icons.dns_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.dns, color: C.primary), label: 'سيرفر'),
+                selectedIcon: Icon(Icons.dns, color: C.primary),
+                label: 'سيرفر'),
             NavigationDestination(
                 icon: Icon(Icons.folder_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.folder, color: C.primary), label: 'ملفات'),
+                selectedIcon: Icon(Icons.folder, color: C.primary),
+                label: 'ملفات'),
             NavigationDestination(
                 icon: Icon(Icons.rocket_launch_outlined, color: C.muted),
-                selectedIcon: Icon(Icons.rocket_launch, color: C.primary), label: 'تطبيقي'),
+                selectedIcon: Icon(Icons.rocket_launch, color: C.primary),
+                label: 'بوتي'),
             NavigationDestination(
                 icon: Icon(Icons.menu, color: C.muted),
-                selectedIcon: Icon(Icons.menu, color: C.primary), label: 'المزيد'),
+                selectedIcon: Icon(Icons.menu, color: C.primary),
+                label: 'المزيد'),
           ],
         ),
       ),

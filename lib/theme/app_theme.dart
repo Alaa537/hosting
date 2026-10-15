@@ -5,7 +5,7 @@ import '../utils/constants.dart';
 class AppTheme {
   static ThemeData get dark {
     final base = ThemeData.dark(useMaterial3: true);
-    final text = GoogleFonts.outfitTextTheme(base.textTheme).apply(
+    final text = GoogleFonts.cairoTextTheme(base.textTheme).apply(
       bodyColor: Colors.white,
       displayColor: Colors.white,
     );
@@ -24,8 +24,8 @@ class AppTheme {
         backgroundColor: C.bg,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.outfit(
-          fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white,
+        titleTextStyle: GoogleFonts.cairo(
+          fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white,
         ),
         iconTheme: const IconThemeData(color: C.primary),
       ),
@@ -33,24 +33,25 @@ class AppTheme {
         color: C.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: C.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: C.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: C.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: C.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: C.primary, width: 1.5),
         ),
         labelStyle: const TextStyle(color: C.muted),
@@ -60,23 +61,38 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: C.primary,
           foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700, fontSize: 15,
-          ),
+              borderRadius: BorderRadius.circular(14)),
+          elevation: 4,
+          shadowColor: C.primary.withValues(alpha: .5),
+          textStyle: GoogleFonts.cairo(
+              fontWeight: FontWeight.w800, fontSize: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(foregroundColor: C.primary),
       ),
       dividerColor: C.border,
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: C.surfaceHi,
+        contentTextStyle: GoogleFonts.cairo(fontSize: 13, color: Colors.white),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        behavior: SnackBarBehavior.floating,
+      ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: C.surfaceHi,
         side: const BorderSide(color: C.border),
-        labelStyle: const TextStyle(color: Colors.white, fontSize: 12),
+        labelStyle: GoogleFonts.cairo(
+            color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: C.surface,
+        indicatorColor: C.primary.withValues(alpha: .15),
+        labelTextStyle: MaterialStateProperty.all(
+          GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }

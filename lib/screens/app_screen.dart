@@ -183,7 +183,7 @@ class _AppScreenState extends State<AppScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تطبيقي'),
+        title: const Text('بوتي'),
         actions: [
           IconButton(onPressed: _load,
               icon: const Icon(Icons.refresh, color: C.primary)),
@@ -210,10 +210,9 @@ class _AppScreenState extends State<AppScreen> {
                     ])),
                   const SizedBox(height: 14),
                   SectionCard(title: 'الأدوات', child: Column(children: [
-                    _listAction(Icons.terminal, 'وحدة التحكم المباشرة',
+                    _listAction(Icons.terminal, 'LOG BOT',
                         () => Navigator.push(context, MaterialPageRoute(
                             builder: (_) => const LiveConsoleScreen()))),
-                    _listAction(Icons.keyboard_command_key, 'إرسال أمر', _command),
                     _listAction(Icons.upload_file, 'رفع app.py جديد', _upload),
                     _listAction(Icons.edit_document, 'تعديل app.py', _edit),
                     _listAction(Icons.folder_outlined, 'إدارة الملفات',

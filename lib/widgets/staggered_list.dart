@@ -32,8 +32,7 @@ class StaggeredList extends StatelessWidget {
             horizontalOffset: scrollDirection == Axis.vertical ? 0 : 40,
             verticalOffset: scrollDirection == Axis.vertical ? 40 : 0,
             curve: Curves.easeOutCubic,
-            child: FadeAnimation(
-              delay: const Duration(milliseconds: 100),
+            child: FadeInAnimation(
               child: itemBuilder(ctx, i),
             ),
           ),

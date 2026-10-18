@@ -16,6 +16,9 @@ import '../widgets/gradient_button.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/skeleton.dart';
 import 'live_console_screen.dart';
+import '../widgets/confetti_burst.dart';
+import '../widgets/animated_counter.dart';
+import '../utils/haptics.dart';
 import 'files_screen.dart';
 
 class AppScreen extends StatefulWidget {
@@ -62,6 +65,7 @@ class _AppScreenState extends State<AppScreen> {
   }
 
   Future<void> _start() async {
+    Haptics.medium();
     try {
       await context.read<AuthProvider>().api!.appStart();
       if (mounted) { snack(context, 'بدأ التشغيل'); _load(); }
@@ -99,6 +103,7 @@ class _AppScreenState extends State<AppScreen> {
   }
 
   Future<void> _stop() async {
+    Haptics.medium();
     if (!await confirm(context, 'إيقاف التطبيق؟')) return;
     if (!mounted) return;
     try {
@@ -197,7 +202,11 @@ class _AppScreenState extends State<AppScreen> {
 
       if (!mounted) return;
 
-      // 5) عرض النتيجة
+      // 5) Confetti + Haptics
+      Haptics.success();
+      ConfettiBurst.fire(context);
+
+      // 6) عرض النتيجة
       final reqs = resp['requirements'];
       final needsRestart = resp['needs_restart'] == true;
 

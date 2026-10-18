@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../services/storage.dart';
 import '../utils/constants.dart';
 import '../widgets/banner_widget.dart';
+import '../widgets/mesh_background.dart';
 import '../widgets/pulse_icon.dart';
 import 'dashboard_screen.dart';
 import 'server_screen.dart';
@@ -54,7 +55,7 @@ class _HomeShellState extends State<HomeShell> {
     final banners = bs?.banners ?? const [];
 
     return Scaffold(
-      body: SafeArea(
+      body: MeshBackground(subtle: true, child: SafeArea(
         bottom: false,
         child: Column(children: [
           if (_pendingRestart) _restartBanner(),

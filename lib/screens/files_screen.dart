@@ -18,6 +18,8 @@ import '../widgets/glass_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/app_toast.dart';
+import '../widgets/staggered_list.dart';
+import '../utils/haptics.dart';
 
 class FilesScreen extends StatefulWidget {
   const FilesScreen({super.key});
@@ -93,6 +95,7 @@ class _FilesScreenState extends State<FilesScreen> {
 
   void _toggleSelect(Map<String, dynamic> item) {
     final name = item['name'] as String;
+    Haptics.select();
     setState(() {
       if (_selected.contains(name)) {
         _selected.remove(name);
@@ -544,7 +547,7 @@ class _FilesScreenState extends State<FilesScreen> {
       onRefresh: _load,
       color: C.primary,
       backgroundColor: C.surface,
-      child: ListView.builder(
+      child: StaggeredList(
         padding: const EdgeInsets.all(12),
         itemCount: _items.length,
         itemBuilder: (_, i) => _tile(_items[i]),
@@ -573,7 +576,7 @@ class _FilesScreenState extends State<FilesScreen> {
       ),
       child: ListTile(
         onLongPress: () => _toggleSelect(item),
-        onTap: () => _enter(item),
+        onTap: () { Haptics.tap(); _enter(item); },
         leading: _selectionMode
             ? Checkbox(
                 value: selected,

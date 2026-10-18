@@ -368,12 +368,6 @@ class ApiClient {
       _post('/backups/$uuid/restore', body: {'truncate': truncate});
 
   Future<void> backupDelete(String uuid) => _del('/backups/$uuid');
-  Future<void> backupLock(String uuid) => _post('/backups/$uuid/lock');
-
-  Future<String> backupDownloadUrl(String uuid) async {
-    final r = await _get('/backups/$uuid/download');
-    return (r as Map)['url'] as String;
-  }
 
   Future<Map<String, dynamic>> backupPolicyGet() async =>
       Map<String, dynamic>.from(await _get('/backups/policy'));

@@ -61,21 +61,7 @@ class _HomeShellState extends State<HomeShell> {
           if (banners.isNotEmpty)
             ...banners.map((b) => BannerStrip(banner: b)),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 280),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, .04),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                      parent: anim, curve: Curves.easeOutCubic)),
-                  child: child,
-                ),
-              ),
-              child: IndexedStack(
-                  key: ValueKey(_i), index: _i, children: _tabs),
+            child: IndexedStack(index: _i, children: _tabs),
             ),
           ),
         ]),

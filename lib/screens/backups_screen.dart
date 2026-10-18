@@ -82,12 +82,8 @@ class _BackupsScreenState extends State<BackupsScreen> {
         ListTile(leading: const Icon(Icons.restore, color: C.warning),
           title: const Text('Restore'),
           onTap: () async { Navigator.pop(context); await _restore(b); }),
-        ListTile(leading: const Icon(Icons.download, color: C.primary),
-          title: const Text('Download URL'),
-          onTap: () async { Navigator.pop(context); await _url(b); }),
-        ListTile(leading: const Icon(Icons.lock_outline, color: C.info),
-          title: const Text('Lock'),
-          onTap: () async { Navigator.pop(context); await _lock(b); }),
+async { Navigator.pop(context); await _url(b); }),
+async { Navigator.pop(context); await _lock(b); }),
         ListTile(leading: const Icon(Icons.delete_outline, color: C.danger),
           title: const Text('Delete', style: TextStyle(color: C.danger)),
           onTap: () async { Navigator.pop(context); await _delete(b); }),
@@ -106,32 +102,7 @@ class _BackupsScreenState extends State<BackupsScreen> {
     } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
   }
 
-  Future<void> _url(BackupInfo b) async {
-    try {
-      final u = await context.read<AuthProvider>().api!.backupDownloadUrl(b.uuid);
-      if (!mounted) return;
-      await showDialog(context: context, builder: (_) => AlertDialog(
-        backgroundColor: C.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Download URL'),
-        content: SelectableText(u, style: const TextStyle(fontSize: 11)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-          ElevatedButton(onPressed: () async {
-            await launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication);
-            if (context.mounted) Navigator.pop(context);
-          }, child: const Text('OPEN')),
-        ],
-      ));
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
-  }
 
-  Future<void> _lock(BackupInfo b) async {
-    try {
-      await context.read<AuthProvider>().api!.backupLock(b.uuid);
-      if (mounted) { snack(context, 'Locked'); _load(); }
-    } catch (e) { if (mounted) snack(context, e.toString(), error: true); }
-  }
 
   Future<void> _delete(BackupInfo b) async {
     if (!await confirm(context, 'Delete backup?', danger: true)) return;

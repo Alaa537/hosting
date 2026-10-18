@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/storage.dart';
 import '../utils/constants.dart';
 import '../widgets/banner_widget.dart';
 import '../widgets/pulse_icon.dart';
@@ -18,6 +19,18 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _i = 0;
+  bool _pendingRestart = false;
+  @override
+  void initState() {
+    super.initState();
+    _checkPending();
+  }
+
+  Future<void> _checkPending() async {
+    final v = await Store.getPendingRestart();
+    if (mounted) setState(() => _pendingRestart = v);
+  }
+
   static const _tabs = [
     DashboardScreen(),
     ServerScreen(),
@@ -44,6 +57,7 @@ class _HomeShellState extends State<HomeShell> {
       body: SafeArea(
         bottom: false,
         child: Column(children: [
+          if (_pendingRestart) _restartBanner(),
           if (banners.isNotEmpty)
             ...banners.map((b) => BannerStrip(banner: b)),
           Expanded(

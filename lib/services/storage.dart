@@ -99,4 +99,18 @@ class Store {
     }
   }
 
+
+  // ============ PENDING RESTART ============
+  static const _kPendingRestart = 'pending_restart';
+
+  static Future<bool> getPendingRestart() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_kPendingRestart) ?? false;
+  }
+
+  static Future<void> setPendingRestart(bool value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kPendingRestart, value);
+  }
+
 }

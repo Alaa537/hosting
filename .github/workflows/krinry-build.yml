@@ -72,6 +72,8 @@ jobs:
           import java.net.InetSocketAddress
           import java.net.Socket
           import java.security.MessageDigest
+import java.net.URL
+import kotlin.concurrent.thread
 
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
@@ -82,6 +84,7 @@ jobs:
                       .setMethodCallHandler { call, result ->
                           when (call.method) {
                               "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
+                              "verifyNativeSignature" -> verifyNativeSignatureAsync(result)
                               "isVpnActive"     -> result.success(isVpnActive())
                               "isRooted"        -> result.success(isRooted())
                               "isFridaRunning"  -> result.success(isFridaRunning())
@@ -119,6 +122,41 @@ jobs:
                   }
                   sb.toString()
               } catch (_: Exception) { "" }
+
+              private fun verifyNativeSignatureAsync(result: MethodChannel.Result) {
+                  thread {
+                      try {
+                          // 1. Get local signature
+                          val localSig = getApkSignatureSha256()?.replace(":", "")?.lowercase()
+                          if (localSig.isNullOrEmpty()) {
+                              result.success(false)
+                              return@thread
+                          }
+
+                          // 2. Fetch remote signature from GitHub
+                          val url = URL("https://raw.githubusercontent.com/Alaa537/hosting-sec/main/signature.json")
+                          val conn = url.openConnection()
+                          conn.connectTimeout = 5000
+                          conn.readTimeout = 5000
+                          val jsonText = conn.getInputStream().bufferedReader().use { it.readText() }
+                          
+                          // 3. Parse JSON (simple string search to avoid adding JSON libs)
+                          val sha256Regex = """ "sha256"\s*:\s*"([^"]+)" """.toRegex()
+                          val match = sha256Regex.find(jsonText)
+                          val remoteSig = match?.groupValues?.get(1)?.replace(":", "")?.lowercase()
+
+                          if (remoteSig.isNullOrEmpty()) {
+                              result.success(false)
+                              return@thread
+                          }
+
+                          // 4. Compare
+                          result.success(localSig == remoteSig)
+                      } catch (e: Exception) {
+                          result.success(false)
+                      }
+                  }
+              }
 
               private fun getApkSignatureSha256(): String? = try {
                   val pm = packageManager

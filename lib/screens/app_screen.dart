@@ -19,6 +19,7 @@ import 'live_console_screen.dart';
 import '../widgets/confetti_burst.dart';
 import '../widgets/animated_counter.dart';
 import '../utils/haptics.dart';
+import '../services/audio_service.dart';
 import 'files_screen.dart';
 
 class AppScreen extends StatefulWidget {
@@ -68,6 +69,7 @@ class _AppScreenState extends State<AppScreen> {
     Haptics.medium();
     try {
       await context.read<AuthProvider>().api!.appStart();
+      AudioService.playStart();
       if (mounted) { snack(context, 'بدأ التشغيل'); _load(); }
     } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }
@@ -75,6 +77,7 @@ class _AppScreenState extends State<AppScreen> {
   Future<void> _restart() async {
     try {
       await context.read<AuthProvider>().api!.appRestart();
+      AudioService.playStart();
       await Store.setPendingRestart(false);
       if (mounted) {
         setState(() => _pendingRestart = false);
@@ -108,6 +111,7 @@ class _AppScreenState extends State<AppScreen> {
     if (!mounted) return;
     try {
       await context.read<AuthProvider>().api!.appStop();
+      AudioService.playStop();
       if (mounted) { snack(context, 'تم الإيقاف'); _load(); }
     } catch (e) { if (mounted) snack(context, friendlyError(e), error: true); }
   }

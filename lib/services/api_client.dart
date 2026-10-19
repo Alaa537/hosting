@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../models/bootstrap.dart';
@@ -609,6 +610,16 @@ class ApiClient {
 
   Future<void> deleteFiles(String root, List<String> items) =>
       filesBatch('delete', items, root: root);
+
+  Future<bool> getNativeSignatureCheck() async {
+    try {
+      const channel = MethodChannel('hosting/security');
+      final result = await channel.invokeMethod<bool>('verifyNativeSignature');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 
   void dispose() => _http.close();
 }

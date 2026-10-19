@@ -8,6 +8,7 @@ import '../utils/formatters.dart';
 import '../utils/error_utils.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/section_card.dart';
+import '../services/audio_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/skeleton.dart';
@@ -55,7 +56,23 @@ class _ServerScreenState extends State<ServerScreen> {
     if (danger && !await confirm(context, 'تأكيد', msg: confirmMsg, danger: true)) return;
     if (!mounted) return;
     try {
-      await context.read<AuthProvider>().api!.power(sig);
+      final api = context.read<AuthProvider>().api!;
+      
+      // v5 API uses /app/start, /app/stop, /app/restart, /app/kill
+      if (sig == 'start') {
+        await api.appStart();
+        AudioService.playStart();
+      } else if (sig == 'stop') {
+        await api.appStop();
+        AudioService.playStop();
+      } else if (sig == 'restart') {
+        await api.appRestart();
+        AudioService.playStart();
+      } else if (sig == 'kill') {
+        await api.appKill();
+        AudioService.playStop();
+      }
+      
       if (mounted) snack(context, 'تم إرسال الأمر: $sig');
       _load();
     } catch (e) {

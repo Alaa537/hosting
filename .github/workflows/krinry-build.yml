@@ -80,12 +80,10 @@ jobs:
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
           import java.io.File
-          import java.net.URL
-          import java.net.InetSocketAddress
+                    import java.net.InetSocketAddress
           import java.net.Socket
           import java.security.MessageDigest
-          import kotlin.concurrent.thread
-
+          
           class MainActivity : FlutterActivity() {
               private val CH = "hosting/security"
 
@@ -107,40 +105,13 @@ jobs:
                               "isFridaRunning" -> result.success(isFridaRunning())
                               "hasXposed" -> result.success(hasXposed())
                               "isDebuggable" -> result.success(isDebuggable())
-                              "verifyNativeSignature" -> verifyNativeSignatureAsync(result)
+                              
                               else -> result.notImplemented()
                           }
                       }
               }
 
-              private fun verifyNativeSignatureAsync(result: MethodChannel.Result) {
-                  thread {
-                      try {
-                          val localSig = getApkSignatureSha256()?.replace(":", "")?.lowercase()
-                          if (localSig.isNullOrEmpty()) {
-                              result.success(false)
-                              return@thread
-                          }
-                          val url = URL("https://raw.githubusercontent.com/Alaa537/hosting-sec/main/signature.json")
-                          val conn = url.openConnection()
-                          conn.connectTimeout = 5000
-                          conn.readTimeout = 5000
-                          val jsonText = conn.getInputStream().bufferedReader().use { it.readText() }
-                          val sha256Regex = """"sha256"\s*:\s*"([^"]+)"""".toRegex()
-                          val match = sha256Regex.find(jsonText)
-                          val remoteSig = match?.groupValues?.get(1)?.replace(":", "")?.lowercase()
-                          if (remoteSig.isNullOrEmpty()) {
-                              result.success(false)
-                              return@thread
-                          }
-                          result.success(localSig == remoteSig)
-                      } catch (e: Exception) {
-                          result.success(false)
-                      }
-                  }
-              }
-
-              private fun isVpnActive(): Boolean = try {
+                            private fun isVpnActive(): Boolean = try {
                   val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                       val active = cm.activeNetwork ?: return false

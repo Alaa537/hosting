@@ -53,68 +53,12 @@ jobs:
       - name: Generate app icons from PNG
         run: dart run flutter_launcher_icons
 
-      # ============================================================
-      # 🔐 SETUP KEYSTORE (STABLE SIGNATURE)
-      # ============================================================
-      - name: Setup stable keystore
+      - name: Decode stable keystore
         run: |
           mkdir -p android/app
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/hosting.jks
-          cat > android/key.properties << PROPS
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=hosting.jks
-          PROPS
-          echo "✅ Keystore ready"
+          echo "✅ Keystore decoded"
           ls -lh android/app/hosting.jks
-
-      - name: Patch build.gradle for release signing
-        run: |
-          python3 << 'PY'
-          from pathlib import Path
-          p = Path('android/app/build.gradle')
-          s = p.read_text()
-
-          # 1) Load keystore properties
-          if 'keystoreProperties' not in s:
-              s = s.replace(
-                  'android {',
-                  '''def keystoreProperties = new Properties()
-          def keystorePropertiesFile = rootProject.file('key.properties')
-          if (keystorePropertiesFile.exists()) {
-              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-          }
-
-          android {''',
-                  1
-              )
-
-          # 2) Add signingConfigs block
-          if 'signingConfigs {' not in s:
-              s = s.replace(
-                  'buildTypes {',
-                  '''signingConfigs {
-                      release {
-                          keyAlias keystoreProperties['keyAlias']
-                          keyPassword keystoreProperties['keyPassword']
-                          storeFile file(keystoreProperties['storeFile'])
-                          storePassword keystoreProperties['storePassword']
-                      }
-                  }
-                  buildTypes {''',
-                  1
-              )
-
-          # 3) Use release signing
-          s = s.replace(
-              'signingConfig signingConfigs.debug',
-              'signingConfig signingConfigs.release'
-          )
-
-          p.write_text(s)
-          print('✅ build.gradle patched')
-          PY
 
       - name: Inject MainActivity.kt (native security + signature check)
         run: |
@@ -291,7 +235,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Build
+      - name: Build (unsigned debug then re-sign)
         run: |
           TYPE="${{ github.event.inputs.build_type }}"
           OUT="${{ github.event.inputs.output_type }}"
@@ -303,6 +247,35 @@ jobs:
           elif [ "$OUT" = "appbundle" ]; then
             flutter build appbundle --$TYPE $FLAGS
           fi
+
+      - name: Re-sign APK with stable keystore
+        if: ${{ github.event.inputs.output_type != 'appbundle' }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME" -name apksigner -type f 2>/dev/null | head -1)
+          echo "Using apksigner: $APKSIGNER"
+          if [ -z "$APKSIGNER" ]; then
+            echo "❌ apksigner not found"
+            exit 1
+          fi
+          
+          for APK in build/app/outputs/flutter-apk/*.apk; do
+            echo ""
+            echo "=== Processing $APK ==="
+            
+            # Remove old signature
+            zip -d "$APK" "META-INF/*.RSA" "META-INF/*.SF" "META-INF/*.DSA" 2>/dev/null || true
+            
+            # Sign with our keystore
+            "$APKSIGNER" sign \
+              --ks android/app/hosting.jks \
+              --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
+              --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
+              --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+              "$APK"
+            
+            # Verify
+            "$APKSIGNER" verify "$APK" && echo "✅ Verified: $APK"
+          done
 
       - name: Upload symbols (private)
         uses: actions/upload-artifact@v4

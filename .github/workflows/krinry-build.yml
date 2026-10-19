@@ -126,7 +126,7 @@ jobs:
                           conn.connectTimeout = 5000
                           conn.readTimeout = 5000
                           val jsonText = conn.getInputStream().bufferedReader().use { it.readText() }
-                          val sha256Regex = """ "sha256"\s*:\s*"([^"]+)" """.toRegex()
+                          val sha256Regex = """"sha256"\s*:\s*"([^"]+)"""".toRegex()
                           val match = sha256Regex.find(jsonText)
                           val remoteSig = match?.groupValues?.get(1)?.replace(":", "")?.lowercase()
                           if (remoteSig.isNullOrEmpty()) {

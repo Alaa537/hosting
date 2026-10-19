@@ -53,6 +53,69 @@ jobs:
       - name: Generate app icons from PNG
         run: dart run flutter_launcher_icons
 
+      # ============================================================
+      # 🔐 SETUP KEYSTORE (STABLE SIGNATURE)
+      # ============================================================
+      - name: Setup stable keystore
+        run: |
+          mkdir -p android/app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/hosting.jks
+          cat > android/key.properties << PROPS
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=hosting.jks
+          PROPS
+          echo "✅ Keystore ready"
+          ls -lh android/app/hosting.jks
+
+      - name: Patch build.gradle for release signing
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle')
+          s = p.read_text()
+
+          # 1) Load keystore properties
+          if 'keystoreProperties' not in s:
+              s = s.replace(
+                  'android {',
+                  '''def keystoreProperties = new Properties()
+          def keystorePropertiesFile = rootProject.file('key.properties')
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+          }
+
+          android {''',
+                  1
+              )
+
+          # 2) Add signingConfigs block
+          if 'signingConfigs {' not in s:
+              s = s.replace(
+                  'buildTypes {',
+                  '''signingConfigs {
+                      release {
+                          keyAlias keystoreProperties['keyAlias']
+                          keyPassword keystoreProperties['keyPassword']
+                          storeFile file(keystoreProperties['storeFile'])
+                          storePassword keystoreProperties['storePassword']
+                      }
+                  }
+                  buildTypes {''',
+                  1
+              )
+
+          # 3) Use release signing
+          s = s.replace(
+              'signingConfig signingConfigs.debug',
+              'signingConfig signingConfigs.release'
+          )
+
+          p.write_text(s)
+          print('✅ build.gradle patched')
+          PY
+
       - name: Inject MainActivity.kt (native security + signature check)
         run: |
           MAIN_KT=android/app/src/main/kotlin/com/alaa/hosting/MainActivity.kt
@@ -69,9 +132,7 @@ jobs:
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
-          import java.io.BufferedReader
           import java.io.File
-          import java.io.FileReader
           import java.net.URL
           import java.net.InetSocketAddress
           import java.net.Socket
@@ -86,26 +147,25 @@ jobs:
                   MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CH)
                       .setMethodCallHandler { call, result ->
                           when (call.method) {
-                              "isVpnActive"        -> result.success(isVpnActive())
-                              "hasVpnInterface"    -> result.success(false)
-                              "hasVpnRoute"        -> result.success(false)
-                              "hasSuspiciousDns"   -> result.success(false)
-                              "hasVpnApp"          -> result.success(false)
-                              "getHttpProxy"       -> result.success(getHttpProxy())
-                              "getRunningProcs"    -> result.success(getRunningProcs())
+                              "isVpnActive" -> result.success(isVpnActive())
+                              "hasVpnInterface" -> result.success(false)
+                              "hasVpnRoute" -> result.success(false)
+                              "hasSuspiciousDns" -> result.success(false)
+                              "hasVpnApp" -> result.success(false)
+                              "getHttpProxy" -> result.success(getHttpProxy())
+                              "getRunningProcs" -> result.success(getRunningProcs())
                               "hasUserCaInstalled" -> result.success(false)
                               "getApkSignatureSha256" -> result.success(getApkSignatureSha256())
-                              "isRooted"           -> result.success(isRooted())
-                              "isFridaRunning"     -> result.success(isFridaRunning())
-                              "hasXposed"          -> result.success(hasXposed())
-                              "isDebuggable"       -> result.success(isDebuggable())
+                              "isRooted" -> result.success(isRooted())
+                              "isFridaRunning" -> result.success(isFridaRunning())
+                              "hasXposed" -> result.success(hasXposed())
+                              "isDebuggable" -> result.success(isDebuggable())
                               "verifyNativeSignature" -> verifyNativeSignatureAsync(result)
                               else -> result.notImplemented()
                           }
                       }
               }
 
-              // ================= NATIVE SIGNATURE VERIFY =================
               private fun verifyNativeSignatureAsync(result: MethodChannel.Result) {
                   thread {
                       try {
@@ -114,22 +174,18 @@ jobs:
                               result.success(false)
                               return@thread
                           }
-
                           val url = URL("https://raw.githubusercontent.com/Alaa537/hosting-sec/main/signature.json")
                           val conn = url.openConnection()
                           conn.connectTimeout = 5000
                           conn.readTimeout = 5000
                           val jsonText = conn.getInputStream().bufferedReader().use { it.readText() }
-
                           val sha256Regex = """ "sha256"\s*:\s*"([^"]+)" """.toRegex()
                           val match = sha256Regex.find(jsonText)
                           val remoteSig = match?.groupValues?.get(1)?.replace(":", "")?.lowercase()
-
                           if (remoteSig.isNullOrEmpty()) {
                               result.success(false)
                               return@thread
                           }
-
                           result.success(localSig == remoteSig)
                       } catch (e: Exception) {
                           result.success(false)
@@ -137,144 +193,74 @@ jobs:
                   }
               }
 
-              // ================= VPN =================
-              private fun isVpnActive(): Boolean {
-                  return try {
-                      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                          val active = cm.activeNetwork ?: return false
-                          val caps = cm.getNetworkCapabilities(active) ?: return false
-                          caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                      } else false
-                  } catch (_: Exception) { false }
-              }
+              private fun isVpnActive(): Boolean = try {
+                  val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      val active = cm.activeNetwork ?: return false
+                      val caps = cm.getNetworkCapabilities(active) ?: return false
+                      caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                  } else false
+              } catch (_: Exception) { false }
 
-              // ================= MITM =================
-              private fun getHttpProxy(): String? {
-                  return try {
-                      val h = System.getProperty("http.proxyHost")
-                      val p = System.getProperty("http.proxyPort")
-                      if (!h.isNullOrEmpty()) "$h:$p" else null
-                  } catch (_: Exception) { null }
-              }
+              private fun getHttpProxy(): String? = try {
+                  val h = System.getProperty("http.proxyHost")
+                  val p = System.getProperty("http.proxyPort")
+                  if (!h.isNullOrEmpty()) "$h:$p" else null
+              } catch (_: Exception) { null }
 
-              private fun getRunningProcs(): String {
-                  return try {
-                      val sb = StringBuilder()
-                      File("/proc").listFiles()?.forEach { f ->
-                          if (f.name.all { it.isDigit() }) {
-                              val cmd = File(f, "cmdline")
-                              if (cmd.exists()) try {
-                                  sb.append(cmd.readText()).append('\n')
-                              } catch (_: Exception) {}
-                          }
+              private fun getRunningProcs(): String = try {
+                  val sb = StringBuilder()
+                  File("/proc").listFiles()?.forEach { f ->
+                      if (f.name.all { it.isDigit() }) {
+                          val cmd = File(f, "cmdline")
+                          if (cmd.exists()) try { sb.append(cmd.readText()).append('\n') } catch (_: Exception) {}
                       }
-                      sb.toString()
-                  } catch (_: Exception) { "" }
-              }
-
-              // ================= ROOT =================
-              private fun isRooted(): Boolean {
-                  return checkRootBinaries() || checkRootPackages() ||
-                         checkWritableSystem() || checkMagisk()
-              }
-
-              private fun checkRootBinaries(): Boolean {
-                  val paths = listOf(
-                      "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su",
-                      "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su",
-                      "/system/sd/xbin/su", "/system/bin/failsafe/su",
-                      "/data/local/su", "/su/bin/su",
-                      "/system/xbin/daemonsu", "/system/xbin/busybox"
-                  )
-                  return paths.any { File(it).exists() }
-              }
-
-              private fun checkRootPackages(): Boolean {
-                  val pkgs = listOf(
-                      "com.topjohnwu.magisk", "com.noshufou.android.su",
-                      "com.koushikdutta.superuser", "eu.chainfire.supersu",
-                      "com.kingroot.kinguser", "com.kingo.root"
-                  )
-                  val pm = packageManager
-                  return pkgs.any {
-                      try { pm.getPackageInfo(it, 0); true } catch (_: Exception) { false }
                   }
+                  sb.toString()
+              } catch (_: Exception) { "" }
+
+              private fun isRooted(): Boolean {
+                  val paths = listOf("/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su", "/data/local/su")
+                  if (paths.any { File(it).exists() }) return true
+                  val pkgs = listOf("com.topjohnwu.magisk", "com.noshufou.android.su", "eu.chainfire.supersu")
+                  return pkgs.any { try { packageManager.getPackageInfo(it, 0); true } catch (_: Exception) { false } }
               }
 
-              private fun checkWritableSystem(): Boolean =
-                  listOf("/system", "/system/bin", "/system/xbin")
-                      .any { try { File(it).canWrite() } catch (_: Exception) { false } }
-
-              private fun checkMagisk(): Boolean {
-                  return File("/sbin/.magisk").exists() ||
-                         File("/init.magisk.rc").exists() ||
-                         File("/dev/.magisk.unblock").exists()
-              }
-
-              // ================= FRIDA =================
               private fun isFridaRunning(): Boolean {
                   for (port in listOf(27042, 27043)) {
-                      try {
-                          val s = Socket()
-                          s.connect(InetSocketAddress("127.0.0.1", port), 80)
-                          s.close()
-                          return true
-                      } catch (_: Exception) {}
+                      try { val s = Socket(); s.connect(InetSocketAddress("127.0.0.1", port), 80); s.close(); return true } catch (_: Exception) {}
                   }
                   try {
                       val f = File("/proc/self/maps")
-                      if (f.exists()) {
-                          val content = f.readText().lowercase()
-                          if (content.contains("frida") || content.contains("gadget")) return true
-                      }
+                      if (f.exists() && f.readText().lowercase().contains("frida")) return true
                   } catch (_: Exception) {}
-                  val procs = getRunningProcs().lowercase()
-                  if (procs.contains("frida") || procs.contains("linjector") ||
-                      procs.contains("gum-js-loop")) return true
                   return false
               }
 
-              // ================= XPOSED =================
-              private fun hasXposed(): Boolean {
-                  return try {
-                      javaClass.classLoader?.loadClass("de.robv.android.xposed.XposedBridge") != null
-                  } catch (_: Exception) {
-                      File("/system/framework/XposedBridge.jar").exists() ||
-                      File("/system/lib/libxposed_art.so").exists()
+              private fun hasXposed(): Boolean = try {
+                  javaClass.classLoader?.loadClass("de.robv.android.xposed.XposedBridge") != null
+              } catch (_: Exception) { File("/system/framework/XposedBridge.jar").exists() }
+
+              private fun isDebuggable(): Boolean = try {
+                  (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 ||
+                  Debug.isDebuggerConnected() || Debug.waitingForDebugger()
+              } catch (_: Exception) { false }
+
+              private fun getApkSignatureSha256(): String? = try {
+                  val pm = packageManager
+                  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                  } else {
+                      @Suppress("DEPRECATION") pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
                   }
-              }
-
-              // ================= DEBUGGER =================
-              private fun isDebuggable(): Boolean {
-                  return try {
-                      (applicationInfo.flags and
-                          android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 ||
-                      Debug.isDebuggerConnected() || Debug.waitingForDebugger()
-                  } catch (_: Exception) { false }
-              }
-
-              // ================= APK SIGNATURE =================
-              private fun getApkSignatureSha256(): String? {
-                  return try {
-                      val pm = packageManager
-                      val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                      } else {
-                          @Suppress("DEPRECATION")
-                          pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-                      }
-                      val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                          info.signingInfo?.apkContentsSigners
-                      } else {
-                          @Suppress("DEPRECATION")
-                          info.signatures
-                      }
-                      val sig = sigs?.firstOrNull() ?: return null
-                      MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
-                          .joinToString(":") { "%02X".format(it) }
-                  } catch (_: Exception) { null }
-              }
+                  val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      info.signingInfo?.apkContentsSigners
+                  } else {
+                      @Suppress("DEPRECATION") info.signatures
+                  }
+                  val sig = sigs?.firstOrNull() ?: return null
+                  MessageDigest.getInstance("SHA-256").digest(sig.toByteArray()).joinToString(":") { "%02X".format(it) }
+              } catch (_: Exception) { null }
           }
           KOT
 
@@ -303,7 +289,6 @@ jobs:
           if 'requestLegacyExternalStorage' not in s:
               s = s.replace('<application', '<application android:requestLegacyExternalStorage="true"', 1)
           p.write_text(s)
-          print('OK manifest patched')
           PY
 
       - name: Build

@@ -65,22 +65,6 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _runSecurityCheck() async {
     try {
       final r = await SecurityService.verify();
-      
-      if (r.isOk) {
-        // فحص إضافي: Kotlin يتأكد من SHA عبر GitHub
-        const channel = MethodChannel('hosting/security');
-        final nativeOk = await channel.invokeMethod<bool>('verifyNativeSignature');
-        
-        if (nativeOk != true) {
-          if (mounted) {
-            setState(() => _blocked = SecurityResult.tampered(
-                'Native signature mismatch — التوقيع غير متطابق'));
-          }
-          return;
-        }
-      }
-      
-      // إذا السيرفر رفض أو التوقيع خطأ
       if (!r.isOk) {
         if (mounted) setState(() => _blocked = r);
       }

@@ -53,12 +53,15 @@ jobs:
       - name: Generate app icons from PNG
         run: dart run flutter_launcher_icons
 
-      - name: Decode stable keystore
+      # ============================================================
+      # 🔐 SETUP KEYSTORE (STABLE SIGNATURE)
+      # ============================================================
+      - name: Setup stable keystore
         run: |
           mkdir -p android/app
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/hosting.jks
-          echo "✅ Keystore decoded"
-          ls -lh android/app/hosting.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/hosting.p12
+          echo "✅ Keystore ready"
+          ls -lh android/app/hosting.p12
 
       - name: Inject MainActivity.kt (native security + signature check)
         run: |
@@ -235,7 +238,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Build (unsigned debug then re-sign)
+      - name: Build
         run: |
           TYPE="${{ github.event.inputs.build_type }}"
           OUT="${{ github.event.inputs.output_type }}"
@@ -252,22 +255,20 @@ jobs:
         if: ${{ github.event.inputs.output_type != 'appbundle' }}
         run: |
           APKSIGNER=$(find "$ANDROID_HOME" -name apksigner -type f 2>/dev/null | head -1)
-          echo "Using apksigner: $APKSIGNER"
           if [ -z "$APKSIGNER" ]; then
             echo "❌ apksigner not found"
             exit 1
           fi
           
           for APK in build/app/outputs/flutter-apk/*.apk; do
-            echo ""
             echo "=== Processing $APK ==="
             
-            # Remove old signature
+            # Remove old signature (safe)
             zip -d "$APK" "META-INF/*.RSA" "META-INF/*.SF" "META-INF/*.DSA" 2>/dev/null || true
             
             # Sign with our keystore
             "$APKSIGNER" sign \
-              --ks android/app/hosting.jks \
+              --ks android/app/hosting.p12 \
               --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
               --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
               --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
